@@ -16,8 +16,9 @@ interface SeriesExplorerProps {
   progressMap: Map<string, Progress>;
   onSelectCardToStudy: (card: Card) => void;
   onStartDeckSession: (deckId: SeriesId) => void;
-  onOpenImportModal: () => void;
+  onOpenImportModal: (targetDeckId?: SeriesId) => void;
   onDeleteCustomDeck: (deckId: SeriesId) => void;
+  onDeleteCustomCard: (cardId: string) => void;
 }
 
 export const SeriesExplorer: React.FC<SeriesExplorerProps> = ({
@@ -28,6 +29,7 @@ export const SeriesExplorer: React.FC<SeriesExplorerProps> = ({
   onStartDeckSession,
   onOpenImportModal,
   onDeleteCustomDeck,
+  onDeleteCustomCard,
 }) => {
   const [expandedSeries, setExpandedSeries] = useState<SeriesId | null>('A');
 
@@ -51,11 +53,11 @@ export const SeriesExplorer: React.FC<SeriesExplorerProps> = ({
 
         <button
           type="button"
-          onClick={onOpenImportModal}
+          onClick={() => onOpenImportModal()}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold bg-[#8C5A3C] hover:bg-[#74482E] text-white shadow-sm transition active:scale-95 shrink-0"
         >
           <Plus className="w-4 h-4" />
-          Cargar Grupo
+          Nuevo Grupo
         </button>
       </div>
 
@@ -108,17 +110,31 @@ export const SeriesExplorer: React.FC<SeriesExplorerProps> = ({
 
               <div className="flex items-center gap-1.5 shrink-0">
                 {deck.isCustom && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteCustomDeck(deck.id);
-                    }}
-                    title="Eliminar este grupo personalizado"
-                    className="p-2 rounded-xl text-[#8A8178] hover:text-red-700 hover:bg-red-900/10 transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenImportModal(deck.id);
+                      }}
+                      title="Añadir más versículos a este grupo"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-[#8C5A3C]/15 text-[#8C5A3C] dark:text-[#D4A373] hover:bg-[#8C5A3C]/25 transition"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Añadir</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteCustomDeck(deck.id);
+                      }}
+                      title="Eliminar este grupo personalizado"
+                      className="p-2 rounded-xl text-[#8A8178] hover:text-red-700 hover:bg-red-900/10 transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </>
                 )}
                 <button
                   type="button"
@@ -146,13 +162,15 @@ export const SeriesExplorer: React.FC<SeriesExplorerProps> = ({
                   const stage = prog?.stage || 'new';
 
                   return (
-                    <button
+                    <div
                       key={card.id}
-                      type="button"
-                      onClick={() => onSelectCardToStudy(card)}
-                      className="w-full text-left px-5 py-3.5 flex items-start justify-between gap-3 hover:bg-[#EFECE6]/70 dark:hover:bg-[#221F1C] transition"
+                      className="w-full px-5 py-3.5 flex items-start justify-between gap-2 hover:bg-[#EFECE6]/70 dark:hover:bg-[#221F1C] transition"
                     >
-                      <div className="space-y-1 pr-2">
+                      <button
+                        type="button"
+                        onClick={() => onSelectCardToStudy(card)}
+                        className="flex-1 text-left space-y-1 pr-2"
+                      >
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-mono font-bold text-[#8C5A3C] dark:text-[#D4A373]">
                             {card.id}
@@ -163,13 +181,16 @@ export const SeriesExplorer: React.FC<SeriesExplorerProps> = ({
                           <span className="text-xs font-serif font-bold text-[#2C2825] dark:text-[#F3EFEA]">
                             — {card.reference}
                           </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#EFECE6] dark:bg-[#26221E] text-[#7D746B] dark:text-[#9E958B]">
+                            {card.translation}
+                          </span>
                         </div>
                         <p className="text-xs font-serif text-[#6E675F] dark:text-[#9E958B] line-clamp-2 italic">
                           “{card.text}”
                         </p>
-                      </div>
+                      </button>
 
-                      <div className="shrink-0 pt-1">
+                      <div className="shrink-0 pt-1 flex items-center gap-1.5">
                         {stage === 'mastered' && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 dark:text-emerald-400 bg-emerald-900/10 px-2 py-0.5 rounded-full">
                             <CheckCircle2 className="w-3 h-3" />
@@ -188,10 +209,35 @@ export const SeriesExplorer: React.FC<SeriesExplorerProps> = ({
                             Nuevo
                           </span>
                         )}
+
+                        {deck.isCustom && deckCards.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteCustomCard(card.id)}
+                            title="Quitar este versículo del grupo"
+                            className="p-1 rounded-lg text-[#8A8178] hover:text-red-700 hover:bg-red-900/10"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
+
+                {/* Pie del grupo personalizado para añadir más versículos rápidamente */}
+                {deck.isCustom && (
+                  <div className="px-5 py-3 bg-[#EFECE6]/50 dark:bg-[#1C1917] flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => onOpenImportModal(deck.id)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#8C5A3C] dark:text-[#D4A373] hover:underline"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Añadir más versículos a «{deck.title}» por cita bíblica
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

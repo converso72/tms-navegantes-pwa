@@ -292,3 +292,93 @@ export async function deleteCustomDeckGroup(deckId: string): Promise<void> {
     await db.decks.delete(deckId);
   });
 }
+
+/**
+ * Añade uno o varios versículos nuevos a un grupo personalizado ya existente
+ * sin perder el progreso de los versículos que ya estaban en ese grupo.
+ */
+export async function appendVersesToDeckGroup(
+  deckId: string,
+  verses: CustomVerseInput[]
+): Promise<{ deckId: string; addedCount: number; firstNewCardId: string | null }> {
+  const deck = await db.decks.get(deckId);
+  if (!deck) throw new Error(`El grupo ${deckId} no existe`);
+
+  const todayKey = getLocalDateKey();
+  const existingDeckCards = await db.cards.where('deckId').equals(deckId).toArray();
+  const maxSeriesOrder = existingDeckCards.reduce((m, c) => Math.max(m, c.seriesOrder), 0);
+  const allCards = await db.cards.toArray();
+  const maxGlobalOrder = allCards.reduce((m, c) => Math.max(m, c.globalOrder), 0);
+
+  const newCards: Card[] = verses.map((v, idx) => {
+    const seriesOrder = maxSeriesOrder + idx + 1;
+    const cardId = `${deckId}-${seriesOrder}`;
+    const cleanText = v.text.trim().replace(/^["“«]|["”»]$/g, '');
+    return {
+      id: cardId,
+      deckId,
+      seriesOrder,
+      globalOrder: maxGlobalOrder + idx + 1,
+      topic: v.topic?.trim() || deck.title,
+      reference: v.reference.trim(),
+      translation: v.translation?.trim() || 'RVR1960',
+      text: cleanText,
+      keywords:
+        v.keywords && v.keywords.length > 0 ? v.keywords : extractAutoKeywords(cleanText),
+      isCustom: true,
+    };
+  });
+
+  const newProgress: Progress[] = newCards.map((c) => ({
+    cardId: c.id,
+    stage: 'new',
+    intervalDays: 0,
+    easeFactor: 2.5,
+    repetitions: 0,
+    lapses: 0,
+    dueDate: todayKey,
+    lastReviewedAt: null,
+    completedModes: [],
+    favorite: false,
+  }));
+
+  const updatedTopics = Array.from(
+    new Set([...deck.topics, ...newCards.map((c) => c.topic)])
+  );
+
+  await db.transaction('rw', db.decks, db.cards, db.progress, async () => {
+    await db.cards.bulkPut(newCards);
+    await db.progress.bulkPut(newProgress);
+    await db.decks.put({
+      ...deck,
+      topics: updatedTopics,
+      totalCards: existingDeckCards.length + newCards.length,
+    });
+  });
+
+  return {
+    deckId,
+    addedCount: newCards.length,
+    firstNewCardId: newCards[0]?.id || null,
+  };
+}
+
+/**
+ * Elimina un versículo individual de un grupo personalizado
+ */
+export async function deleteSingleCustomCard(cardId: string): Promise<void> {
+  const card = await db.cards.get(cardId);
+  if (!card) return;
+  const deck = await db.decks.get(card.deckId);
+  if (!deck || !deck.isCustom) return;
+
+  await db.transaction('rw', db.decks, db.cards, db.progress, async () => {
+    await db.cards.delete(cardId);
+    await db.progress.delete(cardId);
+    const remaining = await db.cards.where('deckId').equals(deck.id).count();
+    await db.decks.put({
+      ...deck,
+      totalCards: remaining,
+    });
+  });
+}

@@ -15,6 +15,7 @@ import {
 import {
   db,
   deleteCustomDeckGroup,
+  deleteSingleCustomCard,
   ensureDatabaseSeeded,
   recordCardReview,
 } from './db/dexie-db';
@@ -36,6 +37,7 @@ export function App() {
   const [selectedCardId, setSelectedCardId] = useState<string>('A-1');
   const [lastFeedbackToast, setLastFeedbackToast] = useState<string | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [importTargetDeckId, setImportTargetDeckId] = useState<SeriesId | null>(null);
 
   // Sembrar base de datos IndexedDB al iniciar
   useEffect(() => {
@@ -65,6 +67,10 @@ export function App() {
     progressList.forEach((p) => map.set(p.cardId, p));
     return map;
   }, [progressList]);
+
+  const customDecks = useMemo(() => {
+    return decks.filter((d) => d.isCustom);
+  }, [decks]);
 
   const todayKey = getLocalDateKey();
 
@@ -119,7 +125,6 @@ export function App() {
     setLastFeedbackToast(`${cardId}: ${ratingLabels[rating]}`);
     setTimeout(() => setLastFeedbackToast(null), 2600);
 
-    // Pasar al siguiente versículo
     navigateCard('next');
   };
 
@@ -161,6 +166,17 @@ export function App() {
     setTimeout(() => setLastFeedbackToast(null), 2400);
   };
 
+  const handleDeleteCustomCard = async (cardId: string) => {
+    await deleteSingleCustomCard(cardId);
+    setLastFeedbackToast(`Versículo ${cardId} eliminado`);
+    setTimeout(() => setLastFeedbackToast(null), 2200);
+  };
+
+  const openImporter = (targetDeckId?: SeriesId) => {
+    setImportTargetDeckId(targetDeckId || null);
+    setIsImportModalOpen(true);
+  };
+
   if (!currentCard || !settings) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FAF8F5] dark:bg-[#141210] text-[#8C5A3C]">
@@ -186,11 +202,11 @@ export function App() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Botón rápido para Cargar Grupo de Versículos */}
+            {/* Botón rápido para Cargar Grupo o Versículo por Cita */}
             <button
               type="button"
-              onClick={() => setIsImportModalOpen(true)}
-              title="Cargar nuevo grupo de versículos"
+              onClick={() => openImporter(currentDeck?.isCustom ? currentDeck.id : undefined)}
+              title="Añadir versículos por cita bíblica o cargar grupo"
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#8C5A3C] text-white text-xs font-semibold shadow-sm hover:bg-[#74482E] transition"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -233,15 +249,21 @@ export function App() {
         </div>
       )}
 
-      {/* Modal para Cargar Grupos de Versículos */}
+      {/* Modal para Cargar Grupos o Añadir Versículos por Cita Bíblica */}
       {isImportModalOpen && (
         <ImportGroupModal
-          onClose={() => setIsImportModalOpen(false)}
-          onImported={(deckId, count) => {
+          existingCustomDecks={customDecks}
+          initialTargetDeckId={importTargetDeckId}
+          onClose={() => {
             setIsImportModalOpen(false);
-            setSelectedCardId(`${deckId}-1`);
+            setImportTargetDeckId(null);
+          }}
+          onImported={(deckId, count, firstCardId) => {
+            setIsImportModalOpen(false);
+            setImportTargetDeckId(null);
+            setSelectedCardId(firstCardId || `${deckId}-1`);
             setActiveTab('study');
-            setLastFeedbackToast(`¡Grupo ${deckId} cargado (${count} versículos)!`);
+            setLastFeedbackToast(`¡${count} versículo(s) añadido(s) a ${deckId}!`);
             setTimeout(() => setLastFeedbackToast(null), 3200);
           }}
         />
@@ -293,6 +315,20 @@ export function App() {
               </button>
             </div>
 
+            {/* Si el usuario está estudiando un grupo personalizado, mostrar acceso directo para añadir más versículos a ese mismo grupo */}
+            {currentDeck?.isCustom && (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => openImporter(currentDeck.id)}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#8C5A3C] dark:text-[#D4A373] bg-[#EFECE6]/80 dark:bg-[#24201D] px-3 py-1 rounded-full border border-[#E2DDD5] dark:border-[#332E2A] hover:bg-[#E5DEC9]"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Añadir más versículos a «{currentDeck.title}»
+                </button>
+              </div>
+            )}
+
             {/* Tarjeta Interactiva Multi-Fase (Flashcard 3D, Primera Letra, Huecos, Dictado) */}
             <MemoryCard
               card={currentCard}
@@ -335,11 +371,13 @@ export function App() {
                 setActiveTab('study');
               }}
               onStartDeckSession={(deckId) => {
-                setSelectedCardId(`${deckId}-1`);
+                const firstDeckCard = cards.find((c) => c.deckId === deckId);
+                setSelectedCardId(firstDeckCard ? firstDeckCard.id : `${deckId}-1`);
                 setActiveTab('study');
               }}
-              onOpenImportModal={() => setIsImportModalOpen(true)}
+              onOpenImportModal={(targetDeckId) => openImporter(targetDeckId)}
               onDeleteCustomDeck={handleDeleteCustomDeck}
+              onDeleteCustomCard={handleDeleteCustomCard}
             />
           </div>
         )}

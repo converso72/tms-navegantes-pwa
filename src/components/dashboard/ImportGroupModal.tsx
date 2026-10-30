@@ -1,19 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   Upload,
   Sparkles,
   FileJson,
-  AlignLeft,
+  BookOpen,
   X,
   CheckCircle2,
   AlertCircle,
+  Search,
+  Trash2,
 } from 'lucide-react';
-import { importCustomDeckGroup, type CustomVerseInput } from '../../db/dexie-db';
+import {
+  importCustomDeckGroup,
+  appendVersesToDeckGroup,
+  type CustomVerseInput,
+} from '../../db/dexie-db';
+import {
+  lookupVerseByReference,
+  type BibleTranslationId,
+} from '../../lib/bible-search';
+import type { Deck } from '../../types/schema';
 
 interface ImportGroupModalProps {
+  existingCustomDecks?: Deck[];
+  initialTargetDeckId?: string | null;
   onClose: () => void;
-  onImported: (deckId: string, count: number) => void;
+  onImported: (deckId: string, count: number, firstCardId?: string) => void;
 }
 
 interface PresetPack {
@@ -359,96 +372,159 @@ const PRESET_PACKS: PresetPack[] = [
   },
 ];
 
-/**
- * Parsea un bloque de texto libre en versículos individuales.
- */
-function parseBulkVersesText(rawText: string, defaultTopic: string): CustomVerseInput[] {
-  const lines = rawText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
-  const parsed: CustomVerseInput[] = [];
-
-  for (const line of lines) {
-    if (line.includes('|')) {
-      const parts = line.split('|').map((p) => p.trim());
-      if (parts.length >= 3) {
-        parsed.push({
-          topic: parts[0],
-          reference: parts[1],
-          text: parts.slice(2).join(' | '),
-        });
-        continue;
-      } else if (parts.length === 2) {
-        parsed.push({
-          topic: defaultTopic,
-          reference: parts[0],
-          text: parts[1],
-        });
-        continue;
-      }
-    }
-
-    const regexMatch = line.match(
-      /^((?:[1-3]\s+)?[A-Za-záéíóúñÁÉÍÓÚÑ]+\s+\d+:\d+(?:-\d+(?:,\s*\d+)?)?)\s*(?:[-–—:]|\s{2,})\s*(.+)$/
-    );
-    if (regexMatch) {
-      parsed.push({
-        topic: defaultTopic,
-        reference: regexMatch[1].trim(),
-        text: regexMatch[2].trim(),
-      });
-    }
-  }
-
-  return parsed;
-}
-
 export const ImportGroupModal: React.FC<ImportGroupModalProps> = ({
+  existingCustomDecks = [],
+  initialTargetDeckId = null,
   onClose,
   onImported,
 }) => {
-  const [tab, setTab] = useState<'presets' | 'paste' | 'json'>('presets');
+  const [tab, setTab] = useState<'by-ref' | 'presets' | 'json'>('by-ref');
+
+  // Modo: Crear nuevo grupo vs Añadir a un grupo existente
+  const [targetMode, setTargetMode] = useState<'new' | 'existing'>(
+    initialTargetDeckId ? 'existing' : 'new'
+  );
+  const [selectedExistingDeckId, setSelectedExistingDeckId] = useState<string>(
+    initialTargetDeckId || existingCustomDecks[0]?.id || ''
+  );
+
+  // Datos para nuevo grupo
   const [code, setCode] = useState('M1');
   const [title, setTitle] = useState('');
-  const [subtitle, setSubtitle] = useState('');
   const [accentColor, setAccentColor] = useState('#8C5A3C');
-  const [rawText, setRawText] = useState(
-    `El Amor de Dios | Juan 3:16 | Porque de tal manera amó Dios al mundo, que ha dado a su Hijo unigénito, para que todo aquel que en él cree, no se pierda, mas tenga vida eterna.\nFe y Confianza | Proverbios 3:5-6 | Fíate de Jehová de todo tu corazón, y no te apoyes en tu propia prudencia. Reconócelo en todos tus caminos, y él enderezará tus veredas.`
-  );
+
+  // Buscador de citas bíblicas (RVR1960, NVI, NBLA)
+  const [translation, setTranslation] = useState<BibleTranslationId>('RVR1960');
+  const [refInput, setRefInput] = useState('');
+  const [topicInput, setTopicInput] = useState('');
+  const [isSearchingRef, setIsSearchingRef] = useState(false);
+
+  // Lista de versículos acumulados para guardar
+  const [queuedVerses, setQueuedVerses] = useState<CustomVerseInput[]>([]);
+
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSaveTextGroup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (initialTargetDeckId) {
+      setTargetMode('existing');
+      setSelectedExistingDeckId(initialTargetDeckId);
+      setTab('by-ref');
+    }
+  }, [initialTargetDeckId]);
+
+  // Añade una o varias citas separadas por punto y coma o salto de línea (ej. "Rom 1:21; Jn 3:16")
+  const handleAddReference = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setErrorMsg(null);
 
-    if (!title.trim()) {
-      setErrorMsg('Por favor, escribe un título para el grupo de versículos.');
+    const queries = refInput
+      .split(/[;\n]+/)
+      .map((q) => q.trim())
+      .filter(Boolean);
+
+    if (queries.length === 0) {
+      setErrorMsg('Escribe una cita bíblica (por ejemplo: Rom 1:21, Jn 3:16 o Sal 23:1-2).');
       return;
     }
 
-    const parsedVerses = parseBulkVersesText(rawText, title.trim());
-    if (parsedVerses.length === 0) {
-      setErrorMsg(
-        'No se detectaron versículos válidos. Usa el formato: "Tema | Cita | Texto" o "Cita | Texto" (uno por línea).'
-      );
+    setIsSearchingRef(true);
+    try {
+      const foundList: CustomVerseInput[] = [];
+      const notFoundList: string[] = [];
+
+      for (const q of queries) {
+        const result = await lookupVerseByReference(q, translation);
+        if (result) {
+          foundList.push({
+            topic: topicInput.trim() || result.bookName,
+            reference: result.canonicalReference,
+            text: result.text,
+            translation: result.translation,
+          });
+        } else {
+          notFoundList.push(q);
+        }
+      }
+
+      if (foundList.length > 0) {
+        setQueuedVerses((prev) => [...prev, ...foundList]);
+        setRefInput('');
+        setTopicInput('');
+      }
+
+      if (notFoundList.length > 0) {
+        setErrorMsg(
+          `No se encontró la cita: "${notFoundList.join(', ')}". Verifica el libro, capítulo y versículo (ej. Rom 1:21).`
+        );
+      }
+    } catch {
+      setErrorMsg('Error al consultar la Biblia offline.');
+    } finally {
+      setIsSearchingRef(false);
+    }
+  };
+
+  const handleRemoveQueuedVerse = (index: number) => {
+    setQueuedVerses((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveQueuedVerses = async () => {
+    setErrorMsg(null);
+
+    // Si el usuario escribió una cita en la caja pero aún no pulsó "+ Añadir", la buscamos primero
+    let finalQueue = [...queuedVerses];
+    if (finalQueue.length === 0 && refInput.trim()) {
+      setIsSearchingRef(true);
+      const res = await lookupVerseByReference(refInput.trim(), translation);
+      setIsSearchingRef(false);
+      if (res) {
+        finalQueue = [
+          {
+            topic: topicInput.trim() || res.bookName,
+            reference: res.canonicalReference,
+            text: res.text,
+            translation: res.translation,
+          },
+        ];
+      }
+    }
+
+    if (finalQueue.length === 0) {
+      setErrorMsg('Añade al menos un versículo escribiendo su cita (ej. Rom 1:21) y pulsando "Añadir".');
       return;
     }
 
     setIsSaving(true);
     try {
-      const result = await importCustomDeckGroup({
-        code,
-        title,
-        subtitle,
-        accentColor,
-        verses: parsedVerses,
-      });
-      onImported(result.deckId, result.importedCount);
+      if (targetMode === 'existing') {
+        if (!selectedExistingDeckId) {
+          setErrorMsg('Selecciona a qué grupo deseas añadir los versículos.');
+          setIsSaving(false);
+          return;
+        }
+        const res = await appendVersesToDeckGroup(selectedExistingDeckId, finalQueue);
+        onImported(res.deckId, res.addedCount, res.firstNewCardId || undefined);
+      } else {
+        if (!title.trim()) {
+          setErrorMsg('Escribe un nombre para el nuevo grupo de versículos.');
+          setIsSaving(false);
+          return;
+        }
+        const res = await importCustomDeckGroup({
+          code,
+          title,
+          accentColor,
+          translation,
+          verses: finalQueue.map((v) => ({
+            ...v,
+            topic: v.topic || title.trim(),
+          })),
+        });
+        onImported(res.deckId, res.importedCount, `${res.deckId}-1`);
+      }
     } catch {
-      setErrorMsg('Ocurrió un error al guardar el grupo en la base de datos local.');
+      setErrorMsg('Ocurrió un error al guardar los versículos.');
     } finally {
       setIsSaving(false);
     }
@@ -465,7 +541,7 @@ export const ImportGroupModal: React.FC<ImportGroupModalProps> = ({
         accentColor: pack.accentColor,
         verses: pack.verses,
       });
-      onImported(result.deckId, result.importedCount);
+      onImported(result.deckId, result.importedCount, `${result.deckId}-1`);
     } catch {
       setErrorMsg('Error al cargar el paquete predefinido.');
     } finally {
@@ -508,7 +584,7 @@ export const ImportGroupModal: React.FC<ImportGroupModalProps> = ({
         accentColor: parsed.accentColor || '#8C5A3C',
         verses: validVerses,
       });
-      onImported(result.deckId, result.importedCount);
+      onImported(result.deckId, result.importedCount, `${result.deckId}-1`);
     } catch {
       setErrorMsg('El archivo seleccionado no tiene un formato JSON válido.');
     }
@@ -516,15 +592,15 @@ export const ImportGroupModal: React.FC<ImportGroupModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#FAF8F5] dark:bg-[#1C1917] border border-[#E5DEC9] dark:border-[#332E2A] shadow-2xl p-5 space-y-4">
+      <div className="w-full max-w-lg max-h-[92vh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#FAF8F5] dark:bg-[#1C1917] border border-[#E5DEC9] dark:border-[#332E2A] shadow-2xl p-5 space-y-3.5">
         {/* Cabecera */}
         <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-3 shrink-0">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#8C5A3C] dark:text-[#D4A373] block">
-              Biblioteca de Planes
+              Biblia Offline Integrada • RVR1960 / NVI / NBLA
             </span>
             <h2 className="text-lg font-serif font-bold text-[#2C2825] dark:text-[#F3EFEA]">
-              Cargar Grupos de Versículos
+              Añadir Versículos o Planes
             </h2>
           </div>
           <button
@@ -539,8 +615,8 @@ export const ImportGroupModal: React.FC<ImportGroupModalProps> = ({
         {/* Pestañas del importador */}
         <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-[#EFECE6] dark:bg-[#26221E] shrink-0">
           {[
+            { id: 'by-ref', label: 'Por Cita Bíblica', icon: BookOpen },
             { id: 'presets', label: 'Planes Oficiales', icon: Sparkles },
-            { id: 'paste', label: 'Pegar Lista', icon: AlignLeft },
             { id: 'json', label: 'Archivo JSON', icon: FileJson },
           ].map(({ id, label, icon: Icon }) => {
             const active = tab === id;
@@ -573,8 +649,264 @@ export const ImportGroupModal: React.FC<ImportGroupModalProps> = ({
         )}
 
         {/* Contenedor desplazable */}
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
-          {/* MODO 1: PACKS BÍBLICOS Y PLANES DE LOS NAVEGANTES EN 1 CLIC */}
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3.5">
+          {/* MODO 1: AÑADIR SOLO ESCRIBIENDO LA CITA BÍBLICA (ej. Rom 1:21) */}
+          {tab === 'by-ref' && (
+            <div className="space-y-3.5">
+              {/* Selector: Nuevo Grupo vs Añadir a Grupo Existente */}
+              {existingCustomDecks.length > 0 && (
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[#EFECE6]/70 dark:bg-[#24201D] border border-[#E2DDD5] dark:border-[#332E2A]">
+                  <button
+                    type="button"
+                    onClick={() => setTargetMode('new')}
+                    className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition ${
+                      targetMode === 'new'
+                        ? 'bg-[#8C5A3C] text-white shadow-sm'
+                        : 'text-[#6E675F] dark:text-[#A39A90]'
+                    }`}
+                  >
+                    Crear Nuevo Grupo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetMode('existing');
+                      if (!selectedExistingDeckId && existingCustomDecks[0]) {
+                        setSelectedExistingDeckId(existingCustomDecks[0].id);
+                      }
+                    }}
+                    className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition ${
+                      targetMode === 'existing'
+                        ? 'bg-[#8C5A3C] text-white shadow-sm'
+                        : 'text-[#6E675F] dark:text-[#A39A90]'
+                    }`}
+                  >
+                    Añadir a Grupo Existente
+                  </button>
+                </div>
+              )}
+
+              {/* Formulario de destino: Nuevo Grupo o Selector de Grupo Existente */}
+              {targetMode === 'new' ? (
+                <div className="grid grid-cols-4 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#6E675F] dark:text-[#A39A90] mb-1">
+                      Sigla
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      placeholder="M1"
+                      className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-[#24201D] border border-[#E2DDD5] dark:border-[#36302B] text-xs font-mono uppercase"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-semibold text-[#6E675F] dark:text-[#A39A90] mb-1">
+                      Nombre del Grupo *
+                    </label>
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Ej. Mis Versículos"
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#24201D] border border-[#E2DDD5] dark:border-[#36302B] text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#6E675F] dark:text-[#A39A90] mb-1">
+                      Color
+                    </label>
+                    <div className="flex items-center gap-1 pt-1.5">
+                      {['#8C5A3C', '#6B705C', '#586F6B', '#7F5539'].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setAccentColor(c)}
+                          style={{ backgroundColor: c }}
+                          className={`w-5 h-5 rounded-full transition ${
+                            accentColor === c ? 'ring-2 ring-offset-1 ring-[#8C5A3C]' : 'opacity-50'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#6E675F] dark:text-[#A39A90] mb-1">
+                    Selecciona el grupo al que quieres añadir más versículos:
+                  </label>
+                  <select
+                    value={selectedExistingDeckId}
+                    onChange={(e) => setSelectedExistingDeckId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-[#24201D] border border-[#E2DDD5] dark:border-[#36302B] text-xs font-semibold text-[#2C2825] dark:text-[#F3EFEA]"
+                  >
+                    {existingCustomDecks.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.code} — {d.title} ({d.totalCards} versículos)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Selector de Traducción Bíblica: RVR1960 / NVI / NBLA */}
+              <div className="p-3 rounded-2xl bg-[#F4F0E8] dark:bg-[#24201D] border border-[#E5DEC9] dark:border-[#332E2A] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-[#5A534C] dark:text-[#C5BDB3]">
+                    Versión Bíblica:
+                  </span>
+                  <div className="inline-flex rounded-xl bg-[#EFECE6] dark:bg-[#1C1917] p-0.5 border border-[#E2DDD5] dark:border-[#332E2A]">
+                    {(
+                      [
+                        { id: 'RVR1960', label: 'RVR1960' },
+                        { id: 'NVI', label: 'NVI' },
+                        { id: 'NBLA', label: 'NBLA' },
+                      ] as { id: BibleTranslationId; label: string }[]
+                    ).map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setTranslation(v.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                          translation === v.id
+                            ? 'bg-[#8C5A3C] text-white shadow-sm'
+                            : 'text-[#6E675F] dark:text-[#A39A90]'
+                        }`}
+                      >
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Buscador instantáneo por referencia */}
+                <form onSubmit={handleAddReference} className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={refInput}
+                        onChange={(e) => setRefInput(e.target.value)}
+                        placeholder="Escribe la cita: ej. Rom 1:21, Jn 3:16, Sal 23:1-2"
+                        className="w-full pl-8 pr-3 py-2.5 rounded-xl bg-white dark:bg-[#1C1917] border border-[#D5CBB8] dark:border-[#3E3832] text-xs font-medium text-[#2C2825] dark:text-[#F3EFEA] focus:outline-none focus:ring-2 focus:ring-[#8C5A3C]"
+                      />
+                      <Search className="w-3.5 h-3.5 text-[#8A8178] absolute left-2.5 top-3" />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSearchingRef}
+                      className="px-3.5 py-2.5 rounded-xl bg-[#8C5A3C] hover:bg-[#74482E] text-white text-xs font-semibold shrink-0 inline-flex items-center gap-1 transition active:scale-95"
+                    >
+                      <Plus className="w-4 h-4" />
+                      {isSearchingRef ? '...' : 'Añadir'}
+                    </button>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={topicInput}
+                    onChange={(e) => setTopicInput(e.target.value)}
+                    placeholder="Tema opcional para este versículo (ej. La Fe, Oración...)"
+                    className="w-full px-3 py-1.5 rounded-xl bg-white/70 dark:bg-[#1C1917]/70 border border-[#E2DDD5] dark:border-[#332E2A] text-[11px] text-[#5A534C] dark:text-[#C5BDB3]"
+                  />
+                </form>
+
+                <p className="text-[10px] text-[#7D746B] dark:text-[#9E958B]">
+                  Puedes escribir abreviaturas como <code>Rom 1:21</code>, <code>Fil 4:6-7</code> o
+                  varias separadas por <code>;</code> (ej. <code>Rom 1:21; Jn 3:16</code>).
+                </p>
+              </div>
+
+              {/* Lista de versículos previsualizados listos para guardar */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#2C2825] dark:text-[#F3EFEA]">
+                    Versículos en cola ({queuedVerses.length})
+                  </span>
+                  {queuedVerses.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setQueuedVerses([])}
+                      className="text-[11px] text-[#8A8178] hover:text-red-700"
+                    >
+                      Vaciar lista
+                    </button>
+                  )}
+                </div>
+
+                {queuedVerses.length === 0 ? (
+                  <div className="p-4 rounded-2xl border border-dashed border-[#D5CBB8] dark:border-[#36302B] text-center text-xs text-[#8A8178]">
+                    Escribe una referencia arriba (ej. <strong>Rom 1:21</strong>) y pulsa{' '}
+                    <strong>+ Añadir</strong> para ver el texto bíblico automáticamente.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {queuedVerses.map((v, idx) => (
+                      <div
+                        key={`${v.reference}-${idx}`}
+                        className="p-3 rounded-2xl bg-white dark:bg-[#24201D] border border-[#E5DEC9] dark:border-[#332E2A] flex items-start justify-between gap-2"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-serif font-bold text-[#8C5A3C] dark:text-[#D4A373]">
+                              {v.reference}
+                            </span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#EFECE6] dark:bg-[#1C1917] text-[#6E675F] dark:text-[#A39A90]">
+                              {v.translation}
+                            </span>
+                            {v.topic && (
+                              <span className="text-[10px] text-[#7D746B] dark:text-[#9E958B]">
+                                • {v.topic}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs font-serif text-[#2C2825] dark:text-[#EAE4DC] leading-snug">
+                            “{v.text}”
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveQueuedVerse(idx)}
+                          className="p-1 text-[#8A8178] hover:text-red-600 shrink-0"
+                          title="Quitar de la lista"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#EDE8DF] dark:border-[#2C2723]">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-[#6E675F] hover:bg-[#EFECE6] dark:hover:bg-[#26221E]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleSaveQueuedVerses}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#8C5A3C] hover:bg-[#74482E] text-white shadow-sm transition active:scale-95"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  {isSaving
+                    ? 'Guardando...'
+                    : targetMode === 'existing'
+                    ? `Añadir al Grupo (${queuedVerses.length || (refInput.trim() ? 1 : 0)})`
+                    : `Crear Grupo (${queuedVerses.length || (refInput.trim() ? 1 : 0)})`}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* MODO 2: PACKS BÍBLICOS Y PLANES DE LOS NAVEGANTES EN 1 CLIC */}
           {tab === 'presets' && (
             <div className="space-y-3">
               <p className="text-xs text-[#6E675F] dark:text-[#A39A90]">
@@ -621,113 +953,6 @@ export const ImportGroupModal: React.FC<ImportGroupModalProps> = ({
             </div>
           )}
 
-          {/* MODO 2: PEGAR LISTA DE VERSÍCULOS */}
-          {tab === 'paste' && (
-            <form onSubmit={handleSaveTextGroup} className="space-y-3.5">
-              <div className="grid grid-cols-3 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#6E675F] dark:text-[#A39A90] mb-1">
-                    Código Corto
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    placeholder="Ej. M1"
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#24201D] border border-[#E2DDD5] dark:border-[#36302B] text-xs font-mono uppercase"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-[11px] font-semibold text-[#6E675F] dark:text-[#A39A90] mb-1">
-                    Nombre del Grupo *
-                  </label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Ej. Promesas de Fe / Estudio Dominical"
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#24201D] border border-[#E2DDD5] dark:border-[#36302B] text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex-1">
-                  <label className="block text-[11px] font-semibold text-[#6E675F] dark:text-[#A39A90] mb-1">
-                    Descripción (opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={subtitle}
-                    onChange={(e) => setSubtitle(e.target.value)}
-                    placeholder="Breve nota sobre este grupo de versículos..."
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#24201D] border border-[#E2DDD5] dark:border-[#36302B] text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#6E675F] dark:text-[#A39A90] mb-1">
-                    Color
-                  </label>
-                  <div className="flex items-center gap-1.5 py-1">
-                    {['#8C5A3C', '#6B705C', '#586F6B', '#7F5539', '#9C6644'].map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setAccentColor(c)}
-                        style={{ backgroundColor: c }}
-                        className={`w-6 h-6 rounded-full transition ${
-                          accentColor === c ? 'ring-2 ring-offset-2 ring-[#8C5A3C]' : 'opacity-60'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-semibold text-[#6E675F] dark:text-[#A39A90]">
-                    Pega tus versículos (uno por línea)
-                  </label>
-                  <span className="text-[10px] font-mono text-[#8C5A3C] dark:text-[#D4A373]">
-                    Tema | Cita | Texto
-                  </span>
-                </div>
-                <textarea
-                  rows={5}
-                  value={rawText}
-                  onChange={(e) => setRawText(e.target.value)}
-                  placeholder="Juan 3:16 | Porque de tal manera amó Dios al mundo..."
-                  className="w-full p-3 rounded-2xl bg-white dark:bg-[#24201D] border border-[#E2DDD5] dark:border-[#36302B] text-xs font-serif leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#8C5A3C]"
-                />
-                <p className="text-[11px] text-[#7D746B] dark:text-[#9E958B] mt-1">
-                  Acepta <code>Tema | Cita | Texto</code>, <code>Cita | Texto</code> o{' '}
-                  <code>Juan 3:16 - Texto</code>. Las palabras clave para los 4 modos se generan
-                  solas.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-[#6E675F] hover:bg-[#EFECE6] dark:hover:bg-[#26221E]"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#8C5A3C] hover:bg-[#74482E] text-white shadow-sm transition"
-                >
-                  <Plus className="w-4 h-4" />
-                  {isSaving ? 'Guardando...' : 'Cargar Grupo'}
-                </button>
-              </div>
-            </form>
-          )}
-
           {/* MODO 3: SUBIR ARCHIVO JSON */}
           {tab === 'json' && (
             <div className="space-y-4 py-2">
@@ -746,25 +971,6 @@ export const ImportGroupModal: React.FC<ImportGroupModalProps> = ({
                   className="hidden"
                 />
               </label>
-
-              <div className="p-3.5 rounded-2xl bg-[#F4F0E8] dark:bg-[#24201D] border border-[#E5DEC9] dark:border-[#332E2A] space-y-1.5">
-                <p className="text-[11px] font-semibold text-[#5A534C] dark:text-[#C5BDB3]">
-                  Ejemplo de estructura JSON admitida:
-                </p>
-                <pre className="text-[10px] font-mono text-[#6E675F] dark:text-[#A39A90] overflow-x-auto">
-{`{
-  "code": "FE",
-  "title": "Héroes de la Fe",
-  "verses": [
-    {
-      "topic": "Certeza de la fe",
-      "reference": "Hebreos 11:1",
-      "text": "Es, pues, la fe la certeza de lo que se espera..."
-    }
-  ]
-}`}
-                </pre>
-              </div>
             </div>
           )}
         </div>
