@@ -172,17 +172,12 @@ export function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF8F5] dark:bg-[#141210] text-[#2C2825] dark:text-[#F3EFEA] pb-24">
-      {/* Cabecera Superior Editorial Mobile-First */}
-      <header className="sticky top-0 z-30 backdrop-blur-md bg-[#FAF8F5]/90 dark:bg-[#141210]/90 border-b border-[#E5DEC9] dark:border-[#2C2723] px-4 py-3">
-        <div className="max-w-md mx-auto flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8C5A3C] dark:text-[#D4A373] block">
-              Topical Memory System
-            </span>
-            <h1 className="text-lg font-serif font-bold tracking-tight">
-              Los Navegantes • RVR1960
-            </h1>
-          </div>
+      {/* Cabecera Superior Editorial Mobile-First con margen seguro para Status Bar Android/iOS */}
+      <header className="sticky top-0 z-30 backdrop-blur-md bg-[#FAF8F5]/95 dark:bg-[#141210]/95 border-b border-[#E5DEC9] dark:border-[#2C2723] px-4 pt-9 pb-3">
+        <div className="max-w-md mx-auto flex items-center justify-between gap-2">
+          <h1 className="text-lg font-serif font-bold tracking-tight whitespace-nowrap">
+            Los Navegantes • RVR1960
+          </h1>
 
           <div className="flex items-center gap-1.5">
             {/* Botón rápido para Cargar Grupo de Versículos */}

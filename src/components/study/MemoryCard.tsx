@@ -166,14 +166,14 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
       </div>
 
       {/* Contenedor con Perspectiva 3D y Gestos Swipe */}
-      <div className="relative w-full min-h-[410px] [perspective:1200px]">
+      <div className="relative w-full h-[420px] [perspective:1200px]">
         <motion.div
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.65}
           onDragEnd={handleDragEnd}
           style={{ x, rotateZ, opacity: cardOpacity }}
-          className="relative w-full min-h-[410px] cursor-grab active:cursor-grabbing"
+          className="relative w-full h-[420px] cursor-grab active:cursor-grabbing"
         >
           {/* Badges flotantes de Swipe */}
           <motion.div
@@ -195,20 +195,20 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
               onClick={() => setIsFlipped((prev) => !prev)}
               animate={{ rotateY: isFlipped ? 180 : 0 }}
               transition={{ type: 'spring', stiffness: 240, damping: 24 }}
-              className="relative w-full min-h-[410px] [transform-style:preserve-3d] rounded-3xl shadow-[0_12px_32px_-8px_rgba(44,40,37,0.10)] border border-[#E5DEC9] dark:border-[#332E2A] bg-[#FAF8F5] dark:bg-[#1C1917]"
+              className="relative w-full h-[420px] [transform-style:preserve-3d] rounded-3xl shadow-[0_12px_32px_-8px_rgba(44,40,37,0.10)] border border-[#E5DEC9] dark:border-[#332E2A] bg-[#FAF8F5] dark:bg-[#1C1917]"
             >
               {/* FRENTE DE LA TARJETA (Tema + Cita) */}
-              <div className="absolute inset-0 [backface-visibility:hidden] p-7 flex flex-col justify-between">
-                <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-3.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8C5A3C] dark:text-[#D4A373]">
+              <div className="absolute inset-0 [backface-visibility:hidden] p-6 flex flex-col justify-between overflow-hidden rounded-3xl">
+                <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-3 shrink-0">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8C5A3C] dark:text-[#D4A373] truncate pr-2">
                     {card.id} • {seriesTitle}
                   </span>
-                  <span className="text-[11px] font-mono text-[#8A8178] bg-[#F1ECE2] dark:bg-[#272320] px-2.5 py-0.5 rounded-full">
+                  <span className="text-[11px] font-mono text-[#8A8178] bg-[#F1ECE2] dark:bg-[#272320] px-2.5 py-0.5 rounded-full shrink-0">
                     {card.translation}
                   </span>
                 </div>
 
-                <div className="my-auto text-center space-y-4 py-8">
+                <div className="my-auto text-center space-y-4 py-6">
                   <p className="text-xs uppercase tracking-[0.2em] text-[#7D746B] dark:text-[#A39A90]">
                     Tema del Versículo
                   </p>
@@ -221,7 +221,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
                   </p>
                 </div>
 
-                <div className="text-center pt-3 border-t border-[#EDE8DF] dark:border-[#2C2723]">
+                <div className="text-center pt-3 border-t border-[#EDE8DF] dark:border-[#2C2723] shrink-0">
                   <span className="inline-flex items-center gap-1.5 text-xs text-[#8A8178] dark:text-[#9E958B]">
                     <BookOpen className="w-3.5 h-3.5" />
                     Toca la tarjeta para voltear (3D) o desliza para evaluar
@@ -229,40 +229,43 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
                 </div>
               </div>
 
-              {/* REVERSO DE LA TARJETA (Regla Los Navegantes: Cita + Versículo + Cita) */}
+              {/* REVERSO DE LA TARJETA (Cita + Versículo con Scroll interno + Cita) */}
               <div
                 style={{ transform: 'rotateY(180deg)' }}
-                className="absolute inset-0 [backface-visibility:hidden] p-7 flex flex-col justify-between bg-[#FAF8F5] dark:bg-[#1C1917] rounded-3xl"
+                className="absolute inset-0 [backface-visibility:hidden] p-6 flex flex-col justify-between bg-[#FAF8F5] dark:bg-[#1C1917] rounded-3xl overflow-hidden"
               >
-                <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-3">
+                <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-2.5 shrink-0">
                   <span className="text-xs font-medium text-[#6E675F] dark:text-[#A39A90]">
                     {card.topic}
                   </span>
-                  <span className="text-[11px] uppercase tracking-wider text-[#8C5A3C] dark:text-[#D4A373] font-semibold">
-                    Regla TMS: Cita • Texto • Cita
+                  <span className="text-[11px] font-mono text-[#8A8178]">
+                    {card.id}
                   </span>
                 </div>
 
-                <div className="my-auto py-4 space-y-4 text-center">
+                <div
+                  onPointerDownCapture={(e) => e.stopPropagation()}
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y py-3 px-1 my-1 flex flex-col justify-between gap-3 text-center"
+                >
                   {/* Cita al principio obligatoria */}
-                  <p className="text-sm font-serif font-bold tracking-wide uppercase text-[#8C5A3C] dark:text-[#D4A373]">
+                  <p className="text-sm font-serif font-bold tracking-wide uppercase text-[#8C5A3C] dark:text-[#D4A373] shrink-0">
                     « {card.reference} »
                   </p>
 
                   {/* Cuerpo del versículo en Serif clásica editorial */}
-                  <blockquote className="font-serif text-[21px] leading-[1.65] text-[#26221E] dark:text-[#F2ECE4] px-1">
+                  <blockquote className="font-serif text-[20px] leading-[1.6] text-[#26221E] dark:text-[#F2ECE4] px-1 my-auto">
                     “{card.text}”
                   </blockquote>
 
                   {/* Cita al final obligatoria */}
-                  <p className="text-sm font-serif font-bold tracking-wide uppercase text-[#8C5A3C] dark:text-[#D4A373]">
+                  <p className="text-sm font-serif font-bold tracking-wide uppercase text-[#8C5A3C] dark:text-[#D4A373] shrink-0">
                     « {card.reference} »
                   </p>
                 </div>
 
-                <div className="text-center pt-3 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between text-xs text-[#8A8178]">
+                <div className="text-center pt-2.5 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between text-xs text-[#8A8178] shrink-0">
                   <span>Toca para volver al frente</span>
-                  <span>Desliza ← / →</span>
+                  <span>Desliza ↕ para leer • ← / →</span>
                 </div>
               </div>
             </motion.div>
@@ -270,8 +273,8 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
 
           {/* MODO 2: MÉTODO DE PRIMERA LETRA (First-Letter Prompt) */}
           {mode === 'first-letter' && (
-            <div className="w-full min-h-[410px] p-6 rounded-3xl shadow-[0_12px_32px_-8px_rgba(44,40,37,0.10)] border border-[#E5DEC9] dark:border-[#332E2A] bg-[#FAF8F5] dark:bg-[#1C1917] flex flex-col justify-between">
-              <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-3">
+            <div className="w-full h-[420px] p-5 rounded-3xl shadow-[0_12px_32px_-8px_rgba(44,40,37,0.10)] border border-[#E5DEC9] dark:border-[#332E2A] bg-[#FAF8F5] dark:bg-[#1C1917] flex flex-col justify-between overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-2.5 shrink-0">
                 <div>
                   <span className="text-[11px] uppercase tracking-widest text-[#8C5A3C] dark:text-[#D4A373] font-semibold block">
                     {card.topic}
@@ -312,8 +315,11 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
                 </div>
               </div>
 
-              {/* Cuerpo interactivo de iniciales */}
-              <div className="my-auto py-5 space-y-4">
+              {/* Cuerpo interactivo de iniciales con scroll interno */}
+              <div
+                onPointerDownCapture={(e) => e.stopPropagation()}
+                className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y py-3 space-y-3"
+              >
                 <p className="text-xs font-serif font-bold uppercase tracking-wider text-[#8C5A3C] dark:text-[#D4A373]">
                   1. Cita inicial: {card.reference}
                 </p>
@@ -344,8 +350,8 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
                 </p>
               </div>
 
-              <div className="pt-3 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between text-xs text-[#8A8178]">
-                <span>Toca cualquier inicial para revelar esa palabra puntual</span>
+              <div className="pt-2.5 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between text-xs text-[#8A8178] shrink-0">
+                <span>Toca cualquier inicial para revelar</span>
                 <span>
                   {revealedIndices.size}/{tokens.length} reveladas
                 </span>
@@ -355,8 +361,8 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
 
           {/* MODO 3: COMPLETAR HUECOS (Cloze Deletion) */}
           {mode === 'cloze' && (
-            <div className="w-full min-h-[410px] p-6 rounded-3xl shadow-[0_12px_32px_-8px_rgba(44,40,37,0.10)] border border-[#E5DEC9] dark:border-[#332E2A] bg-[#FAF8F5] dark:bg-[#1C1917] flex flex-col justify-between">
-              <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-3">
+            <div className="w-full h-[420px] p-5 rounded-3xl shadow-[0_12px_32px_-8px_rgba(44,40,37,0.10)] border border-[#E5DEC9] dark:border-[#332E2A] bg-[#FAF8F5] dark:bg-[#1C1917] flex flex-col justify-between overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-2.5 shrink-0">
                 <div>
                   <span className="text-[11px] uppercase tracking-widest text-[#8C5A3C] dark:text-[#D4A373] font-semibold block">
                     {card.topic}
@@ -370,7 +376,10 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
                 </span>
               </div>
 
-              <div className="my-auto py-4 font-serif text-[19px] leading-[1.85] text-[#26221E] dark:text-[#F2ECE4]">
+              <div
+                onPointerDownCapture={(e) => e.stopPropagation()}
+                className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y py-3 font-serif text-[19px] leading-[1.85] text-[#26221E] dark:text-[#F2ECE4]"
+              >
                 {tokens.map((token) => {
                   const isTarget = clozeTargetIndices.has(token.index);
                   const isSolved = clozeSolvedIndices.has(token.index);
@@ -398,7 +407,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
                 })}
               </div>
 
-              <div className="pt-3 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between text-xs text-[#8A8178]">
+              <div className="pt-2.5 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between text-xs text-[#8A8178] shrink-0">
                 <span>Cita final: {card.reference}</span>
                 <span>
                   {clozeSolvedIndices.size}/{clozeTargetIndices.size} palabras clave
@@ -409,8 +418,8 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
 
           {/* MODO 4: RECUERDO ACTIVO ESCRITO / DICTADO POR INICIAL */}
           {mode === 'dictation' && (
-            <div className="w-full min-h-[410px] p-6 rounded-3xl shadow-[0_12px_32px_-8px_rgba(44,40,37,0.10)] border border-[#E5DEC9] dark:border-[#332E2A] bg-[#FAF8F5] dark:bg-[#1C1917] flex flex-col justify-between">
-              <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-3">
+            <div className="w-full h-[420px] p-5 rounded-3xl shadow-[0_12px_32px_-8px_rgba(44,40,37,0.10)] border border-[#E5DEC9] dark:border-[#332E2A] bg-[#FAF8F5] dark:bg-[#1C1917] flex flex-col justify-between overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-2.5 shrink-0">
                 <div>
                   <span className="text-[11px] uppercase tracking-widest text-[#8C5A3C] dark:text-[#D4A373] font-semibold block">
                     {card.topic} • {card.reference}
@@ -424,8 +433,11 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
                 </span>
               </div>
 
-              <div className="my-auto py-4 space-y-4">
-                <div className="min-h-[150px] p-4 rounded-2xl bg-[#F4F0E8] dark:bg-[#141210] border border-[#E5DEC9] dark:border-[#2C2723] font-serif text-lg leading-relaxed flex flex-wrap gap-1.5 content-start">
+              <div className="flex-1 min-h-0 flex flex-col justify-between py-2 gap-3">
+                <div
+                  onPointerDownCapture={(e) => e.stopPropagation()}
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y p-3.5 rounded-2xl bg-[#F4F0E8] dark:bg-[#141210] border border-[#E5DEC9] dark:border-[#2C2723] font-serif text-lg leading-relaxed flex flex-wrap gap-1.5 content-start"
+                >
                   {tokens.map((token) => {
                     if (token.index < dictationCursor) {
                       return (
@@ -466,22 +478,22 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
 
                 <AnimatePresence mode="wait">
                   {dictationCursor < tokens.length ? (
-                    <div className="relative">
+                    <div className="relative shrink-0">
                       <input
                         type="text"
-                         value=""
+                        value=""
                         onChange={() => {}}
                         onKeyDown={handleDictationKeyDown}
                         placeholder="Toca aquí y escribe la inicial de cada palabra..."
-                        className="w-full px-4 py-3 rounded-xl bg-white dark:bg-[#23201D] border border-[#D5CBB8] dark:border-[#3E3832] text-sm text-[#2C2825] dark:text-[#F3EFEA] focus:outline-none focus:ring-2 focus:ring-[#8C5A3C]"
+                        className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-[#23201D] border border-[#D5CBB8] dark:border-[#3E3832] text-sm text-[#2C2825] dark:text-[#F3EFEA] focus:outline-none focus:ring-2 focus:ring-[#8C5A3C]"
                       />
-                      <CornerDownLeft className="w-4 h-4 text-[#8A8178] absolute right-3.5 top-3.5 pointer-events-none" />
+                      <CornerDownLeft className="w-4 h-4 text-[#8A8178] absolute right-3.5 top-3 pointer-events-none" />
                     </div>
                   ) : (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.96 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="flex items-center justify-center gap-2 p-3 rounded-xl bg-emerald-800/10 border border-emerald-700/30 text-emerald-800 dark:text-emerald-300 text-sm font-medium"
+                      className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-emerald-800/10 border border-emerald-700/30 text-emerald-800 dark:text-emerald-300 text-sm font-medium shrink-0"
                     >
                       <CheckCircle2 className="w-4 h-4" />
                       ¡Versículo completado con precisión! « {card.reference} »
@@ -490,7 +502,7 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
                 </AnimatePresence>
               </div>
 
-              <div className="pt-2 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between text-xs text-[#8A8178]">
+              <div className="pt-2 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between text-xs text-[#8A8178] shrink-0">
                 <span>Si fallas una inicial, se ilumina como pista</span>
                 <button
                   type="button"
