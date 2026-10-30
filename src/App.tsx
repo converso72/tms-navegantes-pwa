@@ -27,6 +27,7 @@ import { ActivityHeatmap } from './components/dashboard/ActivityHeatmap';
 import { SeriesExplorer } from './components/dashboard/SeriesExplorer';
 import { SettingsPanel } from './components/dashboard/SettingsModal';
 import { ImportGroupModal } from './components/dashboard/ImportGroupModal';
+import { APP_VERSION } from './version';
 
 type NavTab = 'study' | 'dashboard' | 'series' | 'settings';
 
@@ -175,9 +176,14 @@ export function App() {
       {/* Cabecera Superior Editorial Mobile-First con margen seguro para Status Bar Android/iOS */}
       <header className="sticky top-0 z-30 backdrop-blur-md bg-[#FAF8F5]/95 dark:bg-[#141210]/95 border-b border-[#E5DEC9] dark:border-[#2C2723] px-4 pt-9 pb-3">
         <div className="max-w-md mx-auto flex items-center justify-between gap-2">
-          <h1 className="text-lg font-serif font-bold tracking-tight whitespace-nowrap">
-            Los Navegantes • RVR1960
-          </h1>
+          <div className="flex items-baseline gap-1.5">
+            <h1 className="text-lg font-serif font-bold tracking-tight whitespace-nowrap">
+              Los Navegantes • RVR1960
+            </h1>
+            <span className="text-[10px] font-mono font-semibold text-[#8C5A3C] dark:text-[#D4A373] bg-[#EFECE6] dark:bg-[#26221E] px-1.5 py-0.5 rounded-md">
+              v{APP_VERSION}
+            </span>
+          </div>
 
           <div className="flex items-center gap-1.5">
             {/* Botón rápido para Cargar Grupo de Versículos */}

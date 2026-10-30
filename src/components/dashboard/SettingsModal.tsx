@@ -5,6 +5,7 @@ import {
   requestNotificationPermission,
   triggerTestReminderNotification,
 } from '../../lib/notifications';
+import { APP_VERSION, ANDROID_VERSION_CODE, VERSION_SUMMARY } from '../../version';
 
 interface SettingsModalProps {
   settings: UserSettings;
@@ -142,16 +143,22 @@ export const SettingsPanel: React.FC<SettingsModalProps> = ({
           y nuevamente la cita bíblica al finalizar para fijar la dirección exacta en la memoria.
         </p>
 
-        <div className="pt-2 border-t border-[#EDE8DF] dark:border-[#2C2723] flex justify-end">
+        <div className="pt-2 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between">
+          <div className="text-[11px] font-mono text-[#8C5A3C] dark:text-[#D4A373]">
+            Versión <strong>v{APP_VERSION}</strong> (Build #{ANDROID_VERSION_CODE})
+          </div>
           <button
             type="button"
             onClick={onResetAllProgress}
             className="inline-flex items-center gap-1.5 text-xs text-red-700 dark:text-red-400 hover:underline"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            Restablecer estadísticas de progreso
+            Restablecer progreso
           </button>
         </div>
+        <p className="text-[10px] text-[#8A8178] dark:text-[#7D746B]">
+          Notas de versión: {VERSION_SUMMARY}
+        </p>
       </div>
     </div>
   );
