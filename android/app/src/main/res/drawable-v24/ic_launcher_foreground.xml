@@ -1,34 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportHeight="108"
-    android:viewportWidth="108">
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Marco sutil interior -->
     <path
-        android:fillType="evenOdd"
-        android:pathData="M32,64C32,64 38.39,52.99 44.13,50.95C51.37,48.37 70.14,49.57 70.14,49.57L108.26,87.69L108,109.01L75.97,107.97L32,64Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="78.5885"
-                android:endY="90.9159"
-                android:startX="48.7653"
-                android:startY="61.0927"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
+        android:fillColor="#00000000"
+        android:pathData="M24,24h60v60h-60z" />
+
+    <!-- Cubierta inferior / Sombra de las páginas de la Biblia abierta -->
     <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M66.94,46.02L66.94,46.02C72.44,50.07 76,56.61 76,64L32,64C32,56.61 35.56,50.11 40.98,46.06L36.18,41.19C35.45,40.45 35.45,39.3 36.18,38.56C36.91,37.81 38.05,37.81 38.78,38.56L44.25,44.05C47.18,42.57 50.48,41.71 54,41.71C57.48,41.71 60.78,42.57 63.68,44.05L69.11,38.56C69.84,37.81 70.98,37.81 71.71,38.56C72.44,39.3 72.44,40.45 71.71,41.19L66.94,46.02ZM62.94,56.92C64.08,56.92 65,56.01 65,54.88C65,53.76 64.08,52.85 62.94,52.85C61.8,52.85 60.88,53.76 60.88,54.88C60.88,56.01 61.8,56.92 62.94,56.92ZM45.06,56.92C46.2,56.92 47.13,56.01 47.13,54.88C47.13,53.76 46.2,52.85 45.06,52.85C43.92,52.85 43,53.76 43,54.88C43,56.01 43.92,56.92 45.06,56.92Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1" />
+        android:fillColor="#00000000"
+        android:strokeColor="#598C5A3C"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:pathData="M27,70 C36,66 46,67 54,72 C62,67 72,66 81,70" />
+
+    <!-- Cuerpo de la Biblia Abierta (Pergamino cálido con borde Terracota #8C5A3C) -->
+    <path
+        android:fillColor="#F4F0E8"
+        android:strokeColor="#8C5A3C"
+        android:strokeWidth="3.2"
+        android:strokeLineJoin="round"
+        android:pathData="M54,37 C46,32 35,31 26,35 L26,66 C35,62 46,63 54,68 C62,63 73,62 82,66 L82,35 C73,31 62,32 54,37 Z" />
+
+    <!-- Lomo central -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#8C5A3C"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:pathData="M54,37 L54,68" />
+
+    <!-- Líneas de escritura página izquierda -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#B38C5A3C"
+        android:strokeWidth="2.1"
+        android:strokeLineCap="round"
+        android:pathData="M32,44 C38,42.5 43,43 48,45 M32,51 C38,49.5 43,50 48,52 M32,58 C38,56.5 43,57 48,59" />
+
+    <!-- Líneas de escritura página derecha -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#B38C5A3C"
+        android:strokeWidth="2.1"
+        android:strokeLineCap="round"
+        android:pathData="M76,44 C70,42.5 65,43 60,45 M76,51 C70,49.5 65,50 60,52 M76,58 C70,56.5 65,57 60,59" />
+
+    <!-- Cinta marcapáginas inferior -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#8C5A3C"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M54,68 L54,79 M50,76 L54,79 L58,76" />
 </vector>

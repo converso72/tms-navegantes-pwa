@@ -1,6 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <rect width="128" height="128" rx="28" fill="#FAF8F5"/>
-  <rect x="8" y="8" width="112" height="112" rx="22" stroke="#8C5A3C" stroke-width="3" stroke-opacity="0.35"/>
-  <path d="M36 34C36 30.6863 38.6863 28 42 28H86C89.3137 28 92 30.6863 92 34V94C92 97.3137 89.3137 100 86 100H42C38.6863 100 36 97.3137 36 94V34Z" fill="#8C5A3C" fill-opacity="0.12" stroke="#8C5A3C" stroke-width="4"/>
-  <path d="M64 42V86M48 56H80" stroke="#8C5A3C" stroke-width="5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Fondo pergamino cálido editorial -->
+  <rect width="512" height="512" rx="112" fill="#FAF8F5"/>
+  <rect x="28" y="28" width="456" height="456" rx="88" stroke="#8C5A3C" stroke-width="6" stroke-opacity="0.22"/>
+
+  <!-- Sombra sutil bajo la Biblia abierta -->
+  <path d="M104 368C152 346 212 352 256 376C300 352 360 346 408 368" stroke="#8C5A3C" stroke-width="14" stroke-linecap="round" stroke-opacity="0.25"/>
+
+  <!-- Páginas principales de la Biblia abierta -->
+  <path d="M256 164C212 138 148 134 96 152V346C148 328 212 332 256 358C300 332 364 328 416 346V152C364 134 300 138 256 164Z" fill="#F4F0E8" stroke="#8C5A3C" stroke-width="16" stroke-linejoin="round"/>
+
+  <!-- Lomo central -->
+  <path d="M256 164V358" stroke="#8C5A3C" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Líneas minimalistas de texto sagrado (página izquierda) -->
+  <path d="M134 202C164 194 196 196 220 208" stroke="#8C5A3C" stroke-width="10" stroke-linecap="round" stroke-opacity="0.65"/>
+  <path d="M134 242C164 234 196 236 220 248" stroke="#8C5A3C" stroke-width="10" stroke-linecap="round" stroke-opacity="0.65"/>
+  <path d="M134 282C164 274 196 276 220 288" stroke="#8C5A3C" stroke-width="10" stroke-linecap="round" stroke-opacity="0.65"/>
+
+  <!-- Líneas minimalistas de texto sagrado (página derecha) -->
+  <path d="M378 202C348 194 316 196 292 208" stroke="#8C5A3C" stroke-width="10" stroke-linecap="round" stroke-opacity="0.65"/>
+  <path d="M378 242C348 234 316 236 292 248" stroke="#8C5A3C" stroke-width="10" stroke-linecap="round" stroke-opacity="0.65"/>
+  <path d="M378 282C348 274 316 276 292 288" stroke="#8C5A3C" stroke-width="10" stroke-linecap="round" stroke-opacity="0.65"/>
+
+  <!-- Cinta marcapáginas saliendo de la parte inferior -->
+  <path d="M256 358V422L236 406L256 422L276 406" stroke="#8C5A3C" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
