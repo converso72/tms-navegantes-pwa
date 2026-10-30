@@ -63,11 +63,11 @@ export const MasteryFunnel: React.FC<MasteryFunnelProps> = ({ progressList }) =>
             Embudo de Dominio TMS
           </h3>
           <p className="text-xs text-[#7D746B] dark:text-[#A39A90]">
-            Estado actual de los 60 versículos de Los Navegantes
+            Estado actual de tus {progressList.length} versículos cargados
           </p>
         </div>
         <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-[#EFECE6] dark:bg-[#2A2622] text-[#8C5A3C] dark:text-[#D4A373] font-semibold">
-          {counts.mastered + counts.reviewing}/60 retenidos
+          {counts.mastered + counts.reviewing}/{progressList.length} retenidos
         </span>
       </div>
 

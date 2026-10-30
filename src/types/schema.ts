@@ -3,7 +3,7 @@
  * "Los Navegantes" (Topical Memory System - TMS) + Algoritmo SRS.
  */
 
-export type SeriesId = 'A' | 'B' | 'C' | 'D' | 'E';
+export type SeriesId = string;
 
 /**
  * Los 4 modos progresivos de entrenamiento para cada tarjeta
@@ -37,29 +37,31 @@ export type MasteryStage =
  */
 export interface Deck {
   id: SeriesId;
-  code: string;          // Ej. "Serie A"
+  code: string;          // Ej. "Serie A" o "Mazo Personal"
   title: string;         // Ej. "Vivir la nueva vida"
   subtitle: string;      // Descripción pastoral/editorial de la serie
   accentColor: string;   // Token o clase de color tierra/editorial
-  topics: string[];      // Los 6 subtemas de la serie (2 versículos por subtema)
-  order: number;         // 1 a 5
-  totalCards: number;    // 12 por serie
+  topics: string[];      // Los subtemas de la serie
+  order: number;         // Orden de visualización
+  totalCards: number;    // Total de versículos del grupo
+  isCustom?: boolean;    // True si fue creado/importado por el usuario
 }
 
 /**
- * Representa un versículo individual del sistema Los Navegantes.
+ * Representa un versículo individual del sistema Los Navegantes o personalizado.
  * Regla TMS estricta: Al recitar, se pronuncia Cita -> Texto -> Cita.
  */
 export interface Card {
-  id: string;            // Ej. "A-1", "A-2" ... "E-12"
-  deckId: SeriesId;      // 'A' | 'B' | 'C' | 'D' | 'E'
-  seriesOrder: number;   // 1 al 12 dentro de su serie
-  globalOrder: number;   // 1 al 60 en todo el TMS
+  id: string;            // Ej. "A-1", "A-2" o "SAL-1"
+  deckId: SeriesId;      // ID de la serie o grupo
+  seriesOrder: number;   // Orden dentro de su grupo
+  globalOrder: number;   // Orden global
   topic: string;         // Ej. "Cristo el Centro"
   reference: string;     // Ej. "2 Corintios 5:17"
-  translation: 'RVR1960';
-  text: string;          // Texto limpio del versículo en Reina-Valera 1960
+  translation: string;   // Ej. "RVR1960", "NVI", "LBLA"
+  text: string;          // Texto limpio del versículo
   keywords: string[];    // Palabras teológicas clave sugeridas para el modo Cloze Deletion
+  isCustom?: boolean;    // True si fue importado por el usuario
 }
 
 /**

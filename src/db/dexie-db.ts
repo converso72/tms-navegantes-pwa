@@ -163,3 +163,132 @@ export async function recordCardReview(
     });
   });
 }
+
+/**
+ * Extrae automáticamente palabras clave significativas (>= 5 letras, sin stopwords comunes)
+ * cuando el usuario importa versículos personalizados sin definir keywords.
+ */
+export function extractAutoKeywords(text: string): string[] {
+  const stopwords = new Set([
+    'porque', 'cuando', 'contra', 'desde', 'entre', 'hacia', 'hasta', 'para', 'segun', 'según',
+    'sobre', 'tras', 'durante', 'mediante', 'todos', 'todas', 'alguno', 'alguna', 'otros',
+    'otras', 'mismo', 'misma', 'aquel', 'aquella', 'estos', 'estas', 'vuestro', 'vuestra',
+    'vuestros', 'vuestras', 'nuestro', 'nuestra', 'había', 'habia', 'están', 'estan', 'serán',
+    'seran', 'tiene', 'tienen', 'como', 'sino', 'también', 'tambien', 'quien', 'cual', 'donde'
+  ]);
+
+  const words = text
+    .replace(/[¿¡!?,.;:"«»()[\]]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 5 && !stopwords.has(w.toLowerCase()));
+
+  return Array.from(new Set(words)).slice(0, 8);
+}
+
+export interface CustomVerseInput {
+  topic?: string;
+  reference: string;
+  text: string;
+  translation?: string;
+  keywords?: string[];
+}
+
+/**
+ * Crea o actualiza un grupo (Deck) personalizado de versículos en IndexedDB
+ * e inicializa su estado SRS para que esté disponible de inmediato offline.
+ */
+export async function importCustomDeckGroup(params: {
+  code: string;
+  title: string;
+  subtitle?: string;
+  accentColor?: string;
+  translation?: string;
+  verses: CustomVerseInput[];
+}): Promise<{ deckId: string; importedCount: number }> {
+  const cleanCode = params.code.trim().toUpperCase().replace(/\s+/g, '-') || 'G';
+  const deckId = cleanCode.replace(/[^A-Z0-9-]/g, '').slice(0, 10) || `G${Date.now().toString().slice(-3)}`;
+  const todayKey = getLocalDateKey();
+
+  const existingDecks = await db.decks.toArray();
+  const existingCardsCount = await db.cards.count();
+  const maxOrder = existingDecks.reduce((max, d) => Math.max(max, d.order), 0);
+
+  const topics = Array.from(
+    new Set(params.verses.map((v) => v.topic?.trim() || params.title.trim()))
+  );
+
+  const newDeck: Deck = {
+    id: deckId,
+    code: `Grupo ${deckId}`,
+    title: params.title.trim(),
+    subtitle:
+      params.subtitle?.trim() ||
+      `Colección personalizada de ${params.verses.length} versículos para memorización.`,
+    accentColor: params.accentColor || '#7F5539',
+    topics,
+    order: maxOrder + 1,
+    totalCards: params.verses.length,
+    isCustom: true,
+  };
+
+  const newCards: Card[] = params.verses.map((v, idx) => {
+    const orderNum = idx + 1;
+    const cardId = `${deckId}-${orderNum}`;
+    const cleanText = v.text.trim().replace(/^["“«]|["”»]$/g, '');
+    return {
+      id: cardId,
+      deckId,
+      seriesOrder: orderNum,
+      globalOrder: existingCardsCount + orderNum,
+      topic: v.topic?.trim() || params.title.trim(),
+      reference: v.reference.trim(),
+      translation: v.translation?.trim() || params.translation?.trim() || 'RVR1960',
+      text: cleanText,
+      keywords:
+        v.keywords && v.keywords.length > 0 ? v.keywords : extractAutoKeywords(cleanText),
+      isCustom: true,
+    };
+  });
+
+  const newProgress: Progress[] = newCards.map((c) => ({
+    cardId: c.id,
+    stage: 'new',
+    intervalDays: 0,
+    easeFactor: 2.5,
+    repetitions: 0,
+    lapses: 0,
+    dueDate: todayKey,
+    lastReviewedAt: null,
+    completedModes: [],
+    favorite: false,
+  }));
+
+  await db.transaction('rw', db.decks, db.cards, db.progress, async () => {
+    // Si ya existía un mazo con el mismo ID personalizado, reemplazamos sus tarjetas
+    const oldCards = await db.cards.where('deckId').equals(deckId).primaryKeys();
+    if (oldCards.length > 0) {
+      await db.cards.bulkDelete(oldCards);
+      await db.progress.bulkDelete(oldCards);
+    }
+    await db.decks.put(newDeck);
+    await db.cards.bulkPut(newCards);
+    await db.progress.bulkPut(newProgress);
+  });
+
+  return { deckId, importedCount: newCards.length };
+}
+
+/**
+ * Elimina un grupo personalizado y sus versículos asociados
+ */
+export async function deleteCustomDeckGroup(deckId: string): Promise<void> {
+  const deck = await db.decks.get(deckId);
+  if (!deck || !deck.isCustom) return;
+
+  await db.transaction('rw', db.decks, db.cards, db.progress, async () => {
+    const cardIds = await db.cards.where('deckId').equals(deckId).primaryKeys();
+    await db.cards.bulkDelete(cardIds);
+    await db.progress.bulkDelete(cardIds);
+    await db.decks.delete(deckId);
+  });
+}
