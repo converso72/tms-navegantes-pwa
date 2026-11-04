@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   motion,
-  AnimatePresence,
   useMotionValue,
   useTransform,
   PanInfo,
@@ -12,14 +11,11 @@ import {
   EyeOff,
   RotateCcw,
   Sparkles,
-  Keyboard,
   Puzzle,
   Layers,
-  CheckCircle2,
-  CornerDownLeft,
 } from 'lucide-react';
 import type { Card, StudyMode, SRSRating } from '../../types/schema';
-import { tokenizeVerse, formatFirstLetterToken, normalizeChar } from '../../lib/text-utils';
+import { tokenizeVerse, formatFirstLetterToken } from '../../lib/text-utils';
 
 interface MemoryCardProps {
   card: Card;
@@ -36,12 +32,12 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
   initialMode = 'flashcard',
   onRateCard,
 }) => {
-  const [mode, setMode] = useState<StudyMode>(initialMode);
+  const [mode, setMode] = useState<StudyMode>(
+    initialMode === 'dictation' ? 'flashcard' : initialMode
+  );
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
   const [revealedIndices, setRevealedIndices] = useState<Set<number>>(new Set());
   const [clozeSolvedIndices, setClozeSolvedIndices] = useState<Set<number>>(new Set());
-  const [dictationCursor, setDictationCursor] = useState<number>(0);
-  const [dictationError, setDictationError] = useState<boolean>(false);
   const [startTime, setStartTime] = useState<number>(Date.now());
 
   // Tokens del versículo
@@ -64,8 +60,6 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
     setIsFlipped(false);
     setRevealedIndices(new Set());
     setClozeSolvedIndices(new Set());
-    setDictationCursor(0);
-    setDictationError(false);
     setStartTime(Date.now());
   }, [card.id, mode]);
 
@@ -108,24 +102,6 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
     }
   };
 
-  // Manejador de teclado para el Modo 4 (Dictado por primera letra)
-  const handleDictationKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (dictationCursor >= tokens.length) return;
-    const key = e.key;
-    if (key.length !== 1) return; // Ignorar teclas de control
-    e.preventDefault();
-
-    const expectedInitial = tokens[dictationCursor].normalizedInitial;
-    const pressedNormalized = normalizeChar(key);
-
-    if (pressedNormalized === expectedInitial) {
-      setDictationError(false);
-      setDictationCursor((prev) => prev + 1);
-    } else {
-      setDictationError(true);
-    }
-  };
-
   const handleRateButton = (rating: SRSRating) => {
     const elapsed = Date.now() - startTime;
     onRateCard(card.id, rating, mode, elapsed);
@@ -133,17 +109,16 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
 
   return (
     <div className="w-full max-w-md mx-auto flex flex-col gap-4 select-none px-2">
-      {/* Selector de las 4 Fases de Memorización */}
+      {/* Selector de las 3 Fases de Memorización */}
       <div
         role="tablist"
         aria-label="Modos de memorización"
-        className="grid grid-cols-4 gap-1.5 p-1.5 rounded-2xl bg-[#EFECE6] dark:bg-[#23201D] border border-[#E2DDD5] dark:border-[#332E2A]"
+        className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-[#EFECE6] dark:bg-[#23201D] border border-[#E2DDD5] dark:border-[#332E2A]"
       >
         {[
           { id: 'flashcard', label: 'Tarjeta 3D', icon: Layers },
           { id: 'first-letter', label: 'Iniciales', icon: Sparkles },
           { id: 'cloze', label: 'Huecos', icon: Puzzle },
-          { id: 'dictation', label: 'Dictado', icon: Keyboard },
         ].map(({ id, label, icon: Icon }) => {
           const active = mode === id;
           return (
@@ -412,108 +387,6 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
                 <span>
                   {clozeSolvedIndices.size}/{clozeTargetIndices.size} palabras clave
                 </span>
-              </div>
-            </div>
-          )}
-
-          {/* MODO 4: RECUERDO ACTIVO ESCRITO / DICTADO POR INICIAL */}
-          {mode === 'dictation' && (
-            <div className="w-full h-[420px] p-5 rounded-3xl shadow-[0_12px_32px_-8px_rgba(44,40,37,0.10)] border border-[#E5DEC9] dark:border-[#332E2A] bg-[#FAF8F5] dark:bg-[#1C1917] flex flex-col justify-between overflow-hidden">
-              <div className="flex items-center justify-between border-b border-[#EDE8DF] dark:border-[#2C2723] pb-2.5 shrink-0">
-                <div>
-                  <span className="text-[11px] uppercase tracking-widest text-[#8C5A3C] dark:text-[#D4A373] font-semibold block">
-                    {card.topic} • {card.reference}
-                  </span>
-                  <h3 className="text-sm font-medium text-[#6E675F] dark:text-[#A39A90]">
-                    Teclea la primera letra de cada palabra
-                  </h3>
-                </div>
-                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-[#EFECE6] dark:bg-[#2A2622] text-[#8C5A3C] dark:text-[#D4A373]">
-                  {dictationCursor}/{tokens.length}
-                </span>
-              </div>
-
-              <div className="flex-1 min-h-0 flex flex-col justify-between py-2 gap-3">
-                <div
-                  onPointerDownCapture={(e) => e.stopPropagation()}
-                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y p-3.5 rounded-2xl bg-[#F4F0E8] dark:bg-[#141210] border border-[#E5DEC9] dark:border-[#2C2723] font-serif text-lg leading-relaxed flex flex-wrap gap-1.5 content-start"
-                >
-                  {tokens.map((token) => {
-                    if (token.index < dictationCursor) {
-                      return (
-                        <motion.span
-                          key={token.index}
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="text-[#26221E] dark:text-[#F2ECE4]"
-                        >
-                          {token.raw}
-                        </motion.span>
-                      );
-                    }
-                    if (token.index === dictationCursor) {
-                      return (
-                        <span
-                          key={token.index}
-                          className={`inline-flex items-center px-2 py-0.5 rounded-md font-mono text-sm border ${
-                            dictationError
-                              ? 'bg-red-600/15 border-red-600 text-red-700 dark:text-red-400 animate-pulse'
-                              : 'bg-[#8C5A3C]/15 border-[#8C5A3C] text-[#8C5A3C] dark:text-[#D4A373]'
-                          }`}
-                        >
-                          {dictationError ? `${token.firstLetter}...` : '_'}
-                        </span>
-                      );
-                    }
-                    return (
-                      <span
-                        key={token.index}
-                        className="text-[#C7BTM3] dark:text-[#3A342F] select-none"
-                      >
-                        •••
-                      </span>
-                    );
-                  })}
-                </div>
-
-                <AnimatePresence mode="wait">
-                  {dictationCursor < tokens.length ? (
-                    <div className="relative shrink-0">
-                      <input
-                        type="text"
-                        value=""
-                        onChange={() => {}}
-                        onKeyDown={handleDictationKeyDown}
-                        placeholder="Toca aquí y escribe la inicial de cada palabra..."
-                        className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-[#23201D] border border-[#D5CBB8] dark:border-[#3E3832] text-sm text-[#2C2825] dark:text-[#F3EFEA] focus:outline-none focus:ring-2 focus:ring-[#8C5A3C]"
-                      />
-                      <CornerDownLeft className="w-4 h-4 text-[#8A8178] absolute right-3.5 top-3 pointer-events-none" />
-                    </div>
-                  ) : (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.96 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-emerald-800/10 border border-emerald-700/30 text-emerald-800 dark:text-emerald-300 text-sm font-medium shrink-0"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      ¡Versículo completado con precisión! « {card.reference} »
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              <div className="pt-2 border-t border-[#EDE8DF] dark:border-[#2C2723] flex items-center justify-between text-xs text-[#8A8178] shrink-0">
-                <span>Si fallas una inicial, se ilumina como pista</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDictationCursor(0);
-                    setDictationError(false);
-                  }}
-                  className="text-[#8C5A3C] dark:text-[#D4A373] font-medium hover:underline"
-                >
-                  Reiniciar dictado
-                </button>
               </div>
             </div>
           )}
