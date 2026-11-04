@@ -20,6 +20,81 @@ export function addDaysToDateKey(days: number, fromDate: Date = new Date()): str
 }
 
 /**
+ * Devuelve el lunes de la semana actual en formato 'YYYY-MM-DD'
+ */
+export function getStartOfWeekDateKey(date: Date = new Date()): string {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 (Dom) a 6 (Sáb)
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diffToMonday);
+  return getLocalDateKey(d);
+}
+
+/**
+ * Calcula de forma exacta la racha actual y el récord histórico de días consecutivos
+ * a partir de las fechas reales ('YYYY-MM-DD') en las que hubo al menos un repaso.
+ */
+export function computeStreaksFromDateKeys(dateKeys: string[]): {
+  currentStreak: number;
+  longestStreak: number;
+  lastActiveDate: string | null;
+} {
+  const uniqueDates = Array.from(new Set(dateKeys.filter(Boolean))).sort();
+  if (uniqueDates.length === 0) {
+    return { currentStreak: 0, longestStreak: 0, lastActiveDate: null };
+  }
+
+  const dateSet = new Set(uniqueDates);
+  const todayKey = getLocalDateKey(new Date());
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = getLocalDateKey(yesterday);
+
+  // Calcular racha activa hoy (o vigente desde ayer si hoy aún no se ha repasado)
+  let currentStreak = 0;
+  let cursorDate: Date | null = null;
+
+  if (dateSet.has(todayKey)) {
+    cursorDate = new Date();
+  } else if (dateSet.has(yesterdayKey)) {
+    cursorDate = yesterday;
+  }
+
+  if (cursorDate) {
+    const d = new Date(cursorDate);
+    while (dateSet.has(getLocalDateKey(d))) {
+      currentStreak += 1;
+      d.setDate(d.getDate() - 1);
+    }
+  }
+
+  // Calcular récord histórico (longestStreak)
+  let longestStreak = 0;
+  let running = 0;
+  let prevTimestamp: number | null = null;
+
+  for (const key of uniqueDates) {
+    const [y, m, d] = key.split('-').map(Number);
+    const currentTs = Date.UTC(y, m - 1, d);
+    if (prevTimestamp !== null && currentTs - prevTimestamp === 86400000) {
+      running += 1;
+    } else {
+      running = 1;
+    }
+    if (running > longestStreak) {
+      longestStreak = running;
+    }
+    prevTimestamp = currentTs;
+  }
+
+  return {
+    currentStreak,
+    longestStreak: Math.max(longestStreak, currentStreak),
+    lastActiveDate: uniqueDates[uniqueDates.length - 1],
+  };
+}
+
+/**
  * Clasifica la etapa del embudo de aprendizaje según el intervalo y repeticiones
  */
 export function computeMasteryStage(intervalDays: number, repetitions: number): MasteryStage {

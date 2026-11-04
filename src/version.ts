@@ -7,9 +7,10 @@
  * - v1.3.0: 9 Planes Oficiales (Navegantes + Fighter Verses) + Icono minimalista de Biblia abierta
  * - v1.4.0: Sistema de versionado visible en la interfaz, en Android (versionCode/versionName) y en el nombre del APK
  * - v1.5.0: Biblias completas Offline (RVR1960, NVI y NBLA) para buscar citas abreviadas (ej. Rom 1:21) y añadir más versículos a grupos existentes
+ * - v1.6.0: Copia de seguridad Local y Google Drive, nuevo panel de Progreso (paquete semanal, repasos semanales y diarios), racha corregida y eliminación de Embudo/Heatmap
  */
-export const APP_VERSION = '1.5.0';
-export const ANDROID_VERSION_CODE = 6;
-export const VERSION_DATE = '2026-10-30';
+export const APP_VERSION = '1.6.0';
+export const ANDROID_VERSION_CODE = 7;
+export const VERSION_DATE = '2026-11-04';
 export const VERSION_SUMMARY =
-  'Búsqueda Offline por cita (RVR1960, NVI, NBLA) y ampliación de grupos existentes';
+  'Copia de seguridad Local/Google Drive, nuevo panel de Progreso semanal/diario y cálculo exacto de racha';

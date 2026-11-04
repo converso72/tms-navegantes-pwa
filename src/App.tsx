@@ -18,13 +18,12 @@ import {
   deleteSingleCustomCard,
   ensureDatabaseSeeded,
   recordCardReview,
+  syncStreakOnStartup,
 } from './db/dexie-db';
 import { getLocalDateKey } from './db/srs-engine';
 import type { Card, Progress, SeriesId, SRSRating, StudyMode } from './types/schema';
 import { MemoryCard } from './components/study/MemoryCard';
-import { StreakCounter } from './components/dashboard/StreakCounter';
-import { MasteryFunnel } from './components/dashboard/MasteryFunnel';
-import { ActivityHeatmap } from './components/dashboard/ActivityHeatmap';
+import { ProgressSummary } from './components/dashboard/ProgressSummary';
 import { SeriesExplorer } from './components/dashboard/SeriesExplorer';
 import { SettingsPanel } from './components/dashboard/SettingsModal';
 import { ImportGroupModal } from './components/dashboard/ImportGroupModal';
@@ -39,9 +38,9 @@ export function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [importTargetDeckId, setImportTargetDeckId] = useState<SeriesId | null>(null);
 
-  // Sembrar base de datos IndexedDB al iniciar
+  // Sembrar base de datos IndexedDB al iniciar y sincronizar racha diaria real
   useEffect(() => {
-    ensureDatabaseSeeded();
+    ensureDatabaseSeeded().then(() => syncStreakOnStartup());
   }, []);
 
   // Consultas reactivas en tiempo real desde IndexedDB con Dexie
@@ -340,10 +339,12 @@ export function App() {
 
         {activeTab === 'dashboard' && (
           <div className="space-y-4 py-1">
-            <StreakCounter
-              currentStreak={settings.currentStreak}
-              longestStreak={settings.longestStreak}
-              todayReviewedCount={todayReviewedCount}
+            <ProgressSummary
+              decks={decks}
+              cards={cards}
+              progressList={progressList}
+              reviewLogs={reviewLogs}
+              activeDeck={currentDeck}
               dailyGoal={settings.dailyGoalCards}
               dueCardsCount={dueCards.length}
               onStartDailySession={() => {
@@ -352,11 +353,12 @@ export function App() {
                 }
                 setActiveTab('study');
               }}
+              onSelectDeckToStudy={(deckId) => {
+                const firstCard = cards.find((c) => c.deckId === deckId);
+                setSelectedCardId(firstCard ? firstCard.id : `${deckId}-1`);
+                setActiveTab('study');
+              }}
             />
-
-            <MasteryFunnel progressList={progressList} />
-
-            <ActivityHeatmap reviewLogs={reviewLogs} />
           </div>
         )}
 

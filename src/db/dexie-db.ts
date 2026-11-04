@@ -9,7 +9,11 @@ import type {
   UserSettings,
 } from '../types/schema';
 import tmsDataset from '../data/tms-navegantes.json';
-import { calculateNextProgress, getLocalDateKey } from './srs-engine';
+import {
+  calculateNextProgress,
+  computeStreaksFromDateKeys,
+  getLocalDateKey,
+} from './srs-engine';
 
 export class NavegantesDatabase extends Dexie {
   decks!: Table<Deck, string>;
@@ -131,7 +135,10 @@ export async function recordCardReview(
       dateKey: todayKey,
     });
 
-    // Actualizar racha diaria
+    // Recalcular racha diaria exacta desde todo el historial de reviewLogs
+    const allLogs = await db.reviewLogs.toArray();
+    const streakInfo = computeStreaksFromDateKeys(allLogs.map((l) => l.dateKey));
+
     const settings = (await db.settings.get('default')) || {
       id: 'default' as const,
       dailyGoalCards: 5,
@@ -144,24 +151,145 @@ export async function recordCardReview(
       strictCitationRule: true,
     };
 
-    let currentStreak = settings.currentStreak;
-    if (settings.lastActiveDate !== todayKey) {
-      if (settings.lastActiveDate === yesterdayKey) {
-        currentStreak += 1;
-      } else {
-        currentStreak = 1;
-      }
-    }
-
-    const longestStreak = Math.max(settings.longestStreak, currentStreak);
-
     await db.settings.put({
       ...settings,
-      currentStreak,
-      longestStreak,
-      lastActiveDate: todayKey,
+      currentStreak: streakInfo.currentStreak,
+      longestStreak: Math.max(settings.longestStreak, streakInfo.longestStreak),
+      lastActiveDate: streakInfo.lastActiveDate,
     });
   });
+}
+
+/**
+ * Sincroniza la racha diaria al abrir la aplicación (por si pasaron >1 días sin repasar)
+ */
+export async function syncStreakOnStartup(): Promise<void> {
+  const allLogs = await db.reviewLogs.toArray();
+  const streakInfo = computeStreaksFromDateKeys(allLogs.map((l) => l.dateKey));
+  const settings = await db.settings.get('default');
+  if (!settings) return;
+
+  if (
+    settings.currentStreak !== streakInfo.currentStreak ||
+    settings.longestStreak < streakInfo.longestStreak
+  ) {
+    await db.settings.put({
+      ...settings,
+      currentStreak: streakInfo.currentStreak,
+      longestStreak: Math.max(settings.longestStreak, streakInfo.longestStreak),
+      lastActiveDate: streakInfo.lastActiveDate,
+    });
+  }
+}
+
+export interface FullBackupPayload {
+  app: 'tms-navegantes-pwa';
+  schemaVersion: number;
+  exportedAt: string;
+  decks: Deck[];
+  cards: Card[];
+  progress: Progress[];
+  reviewLogs: ReviewLog[];
+  settings: UserSettings | undefined;
+}
+
+/**
+ * Exporta toda la base de datos local (grupos, versículos, progreso SRS, historial y ajustes)
+ * en un objeto JSON listo para guardar en local o en Google Drive.
+ */
+export async function createFullBackupPayload(): Promise<FullBackupPayload> {
+  const [decks, cards, progress, reviewLogs, settings] = await Promise.all([
+    db.decks.toArray(),
+    db.cards.toArray(),
+    db.progress.toArray(),
+    db.reviewLogs.toArray(),
+    db.settings.get('default'),
+  ]);
+
+  return {
+    app: 'tms-navegantes-pwa',
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    decks,
+    cards,
+    progress,
+    reviewLogs,
+    settings,
+  };
+}
+
+/**
+ * Restaura una copia de seguridad completa (desde archivo local o Google Drive)
+ * validando su estructura y recalculando la racha de días.
+ */
+export async function restoreFullBackupPayload(rawJson: string): Promise<{
+  decksCount: number;
+  cardsCount: number;
+  logsCount: number;
+}> {
+  const data = JSON.parse(rawJson) as Partial<FullBackupPayload>;
+
+  if (
+    !data ||
+    !Array.isArray(data.decks) ||
+    !Array.isArray(data.cards) ||
+    !Array.isArray(data.progress)
+  ) {
+    throw new Error('El archivo no es una copia de seguridad válida de Los Navegantes TMS.');
+  }
+
+  const logs = Array.isArray(data.reviewLogs) ? data.reviewLogs : [];
+  const streakInfo = computeStreaksFromDateKeys(logs.map((l) => l.dateKey));
+
+  await db.transaction(
+    'rw',
+    [db.decks, db.cards, db.progress, db.reviewLogs, db.settings],
+    async () => {
+      await db.decks.clear();
+      await db.cards.clear();
+      await db.progress.clear();
+      await db.reviewLogs.clear();
+
+      await db.decks.bulkPut(data.decks!);
+      await db.cards.bulkPut(data.cards!);
+      await db.progress.bulkPut(data.progress!);
+      if (logs.length > 0) {
+        await db.reviewLogs.bulkPut(logs);
+      }
+
+      const currentSettings = (await db.settings.get('default')) || {
+        id: 'default' as const,
+        dailyGoalCards: 5,
+        currentStreak: 0,
+        longestStreak: 0,
+        lastActiveDate: null,
+        theme: 'light' as const,
+        notificationsEnabled: false,
+        reminderTime: '08:00',
+        strictCitationRule: true,
+      };
+
+      const restoredSettings: UserSettings = {
+        ...currentSettings,
+        ...(data.settings || {}),
+        id: 'default',
+        currentStreak: streakInfo.currentStreak,
+        longestStreak: Math.max(
+          data.settings?.longestStreak || 0,
+          streakInfo.longestStreak
+        ),
+        lastActiveDate: streakInfo.lastActiveDate,
+      };
+
+      await db.settings.put(restoredSettings);
+    }
+  );
+
+  return {
+    decksCount: data.decks.length,
+    cardsCount: data.cards.length,
+    logsCount: logs.length,
+  };
 }
 
 /**
