@@ -1,11 +1,20 @@
 /**
- * Utilidades de Copia de Seguridad Local y en Google Drive (`appdata` / `drive.file`)
- * Soporta:
- * 1. Descarga directa de archivo `.json` en el dispositivo
- * 2. Compartir directamente a la app nativa de Google Drive en Android/iOS (Web Share API Level 2)
- * 3. Sincronización directa por API REST de Google Drive (usando Token de Acceso OAuth2 de Google)
+ * Sistema Nativo de Copia de Seguridad Local y en Google Drive para Android (Capacitor) y Web PWA.
+ *
+ * ¿Por qué fallaba antes en el APK de Android?
+ * El WebView de Android dentro de una app nativa Capacitor bloquea las descargas <a download> (`blob:`)
+ * y no soporta `navigator.share({ files })` sin permisos nativos.
+ *
+ * Solución definitiva:
+ * Usamos los plugins nativos de Android `@capacitor/filesystem` y `@capacitor/share` para escribir
+ * el archivo físico `.json` en el sistema de archivos del teléfono y abrir el Intent nativo de Android
+ * (`ACTION_SEND` con `FileProvider`), permitiendo elegir "Guardar en Drive" (Google Drive) o guardarlo
+ * directamente en la carpeta Documentos del teléfono.
  */
 
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import {
   createFullBackupPayload,
   restoreFullBackupPayload,
@@ -15,14 +24,54 @@ import { getLocalDateKey } from '../db/srs-engine';
 const DRIVE_BACKUP_FILENAME = 'los-navegantes-tms-backup.json';
 
 /**
- * Genera el archivo de copia de seguridad y lo descarga localmente en el dispositivo
+ * 1. Guardar copia de seguridad en el almacenamiento LOCAL del dispositivo.
+ * - En Android APK: Escribe el archivo físico en `Documents/los-navegantes-tms-backup-YYYY-MM-DD.json`
+ *   (y si el sistema restringe Documents en ciertas versiones de Android, ofrece guardarlo con el diálogo del sistema).
+ * - En navegador Web: Descarga el archivo `.json`.
  */
-export async function downloadLocalBackupFile(): Promise<string> {
+export async function downloadLocalBackupFile(): Promise<{
+  fileName: string;
+  locationLabel: string;
+}> {
   const payload = await createFullBackupPayload();
   const jsonString = JSON.stringify(payload, null, 2);
   const dateKey = getLocalDateKey();
   const fileName = `los-navegantes-tms-backup-${dateKey}.json`;
 
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await Filesystem.writeFile({
+        path: fileName,
+        data: jsonString,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+      });
+      return {
+        fileName,
+        locationLabel: `Carpeta Documentos/${fileName}`,
+      };
+    } catch {
+      // Si Android 11+ bloquea escritura directa en Documents sin permiso previo,
+      // escribimos en Cache y abrimos el selector nativo para que el usuario elija carpeta local
+      const cached = await Filesystem.writeFile({
+        path: fileName,
+        data: jsonString,
+        directory: Directory.Cache,
+        encoding: Encoding.UTF8,
+      });
+      await Share.share({
+        title: 'Guardar Copia de Seguridad Local',
+        url: cached.uri,
+        dialogTitle: 'Guardar archivo de copia de seguridad',
+      });
+      return {
+        fileName,
+        locationLabel: fileName,
+      };
+    }
+  }
+
+  // Fallback para navegador Web (PC / Chrome móvil)
   const blob = new Blob([jsonString], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
@@ -34,32 +83,96 @@ export async function downloadLocalBackupFile(): Promise<string> {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 
-  return fileName;
+  return {
+    fileName,
+    locationLabel: `Descargas/${fileName}`,
+  };
 }
 
 /**
- * Abre el selector nativo de compartir de Android / iOS con el archivo de copia de seguridad
- * para que el usuario pueda elegir "Guardar en Google Drive" con un toque sin configurar claves.
+ * 2. Guardar copia de seguridad en GOOGLE DRIVE.
+ * - En Android APK: Crea el archivo físico temporal con `@capacitor/filesystem` en `Directory.Cache`
+ *   y lanza el Intent nativo de Android (`@capacitor/share`) con el URI del archivo (`content://...`).
+ *   Esto abre el panel oficial de Android donde aparece el icono de "Google Drive" ("Guardar en Drive")
+ *   con tu cuenta de Google ya iniciada en el móvil.
  */
 export async function shareBackupToGoogleDriveApp(): Promise<boolean> {
   const payload = await createFullBackupPayload();
   const jsonString = JSON.stringify(payload, null, 2);
   const dateKey = getLocalDateKey();
   const fileName = `los-navegantes-tms-backup-${dateKey}.json`;
-  const file = new File([jsonString], fileName, { type: 'application/json' });
 
+  if (Capacitor.isNativePlatform()) {
+    const written = await Filesystem.writeFile({
+      path: fileName,
+      data: jsonString,
+      directory: Directory.Cache,
+      encoding: Encoding.UTF8,
+    });
+
+    await Share.share({
+      title: fileName,
+      text: `Copia de seguridad Los Navegantes TMS (${dateKey})`,
+      url: written.uri,
+      dialogTitle: 'Selecciona "Google Drive" para guardar tu copia',
+    });
+
+    return true;
+  }
+
+  // En navegador Web que soporte Web Share API de archivos
+  const file = new File([jsonString], fileName, { type: 'application/json' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     await navigator.share({
-      title: 'Copia de Seguridad • Los Navegantes TMS',
-      text: `Respaldo de versículos y progreso (${dateKey})`,
+      title: fileName,
+      text: `Copia de seguridad Los Navegantes TMS (${dateKey})`,
       files: [file],
     });
     return true;
   }
 
-  // Fallback si el navegador o WebView no soporta compartir archivos directamente
+  // Si es navegador de escritorio sin menú compartir, descarga el archivo
   await downloadLocalBackupFile();
   return false;
+}
+
+/**
+ * 3. Recuperar automáticamente desde la carpeta Documentos del teléfono (si se guardó en Local)
+ */
+export async function restoreLatestLocalBackupFromDocuments(): Promise<{
+  decksCount: number;
+  cardsCount: number;
+  logsCount: number;
+  fileName: string;
+} | null> {
+  if (!Capacitor.isNativePlatform()) return null;
+
+  const dir = await Filesystem.readdir({
+    path: '',
+    directory: Directory.Documents,
+  });
+
+  const backupFiles = dir.files
+    .filter((f) => f.name.startsWith('los-navegantes-tms-backup') && f.name.endsWith('.json'))
+    .sort((a, b) => b.name.localeCompare(a.name));
+
+  if (backupFiles.length === 0) {
+    return null;
+  }
+
+  const latest = backupFiles[0];
+  const content = await Filesystem.readFile({
+    path: latest.name,
+    directory: Directory.Documents,
+    encoding: Encoding.UTF8,
+  });
+
+  const rawJson = typeof content.data === 'string' ? content.data : JSON.stringify(content.data);
+  const stats = await restoreFullBackupPayload(rawJson);
+  return {
+    ...stats,
+    fileName: latest.name,
+  };
 }
 
 /**
@@ -78,7 +191,6 @@ export async function uploadBackupToGoogleDriveApi(accessToken: string): Promise
   const payload = await createFullBackupPayload();
   const jsonContent = JSON.stringify(payload, null, 2);
 
-  // 1. Buscar si ya existe una copia anterior en Google Drive para actualizarla
   const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
     `name = '${DRIVE_BACKUP_FILENAME}' and trashed = false`
   )}&fields=files(id,name,modifiedTime)&pageSize=1`;
@@ -89,7 +201,7 @@ export async function uploadBackupToGoogleDriveApi(accessToken: string): Promise
 
   if (!searchRes.ok) {
     throw new Error(
-      'No se pudo conectar con Google Drive. Verifica que el token sea válido y tenga permiso drive.file.'
+      'No se pudo conectar con Google Drive. Verifica que el token sea válido.'
     );
   }
 

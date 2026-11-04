@@ -8,9 +8,10 @@
  * - v1.4.0: Sistema de versionado visible en la interfaz, en Android (versionCode/versionName) y en el nombre del APK
  * - v1.5.0: Biblias completas Offline (RVR1960, NVI y NBLA) para buscar citas abreviadas (ej. Rom 1:21) y añadir más versículos a grupos existentes
  * - v1.6.0: Copia de seguridad Local y Google Drive, nuevo panel de Progreso (paquete semanal, repasos semanales y diarios), racha corregida y eliminación de Embudo/Heatmap
+ * - v1.7.0: Soporte nativo Android (Capacitor Filesystem + Share) para guardar y recuperar copias en Google Drive y almacenamiento local
  */
-export const APP_VERSION = '1.6.0';
-export const ANDROID_VERSION_CODE = 7;
+export const APP_VERSION = '1.7.0';
+export const ANDROID_VERSION_CODE = 8;
 export const VERSION_DATE = '2026-11-04';
 export const VERSION_SUMMARY =
-  'Copia de seguridad Local/Google Drive, nuevo panel de Progreso semanal/diario y cálculo exacto de racha';
+  'Soporte nativo en Android para guardar y recuperar copias de seguridad en Google Drive y carpeta Documentos';

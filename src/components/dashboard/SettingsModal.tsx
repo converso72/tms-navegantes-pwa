@@ -22,6 +22,7 @@ import {
 import {
   downloadLocalBackupFile,
   shareBackupToGoogleDriveApp,
+  restoreLatestLocalBackupFromDocuments,
   uploadBackupToGoogleDriveApi,
   restoreBackupFromGoogleDriveApi,
 } from '../../lib/backup-drive';
@@ -66,15 +67,18 @@ export const SettingsPanel: React.FC<SettingsModalProps> = ({
     setIsProcessingBackup(true);
     setBackupMessage(null);
     try {
-      const fileName = await downloadLocalBackupFile();
+      const { locationLabel } = await downloadLocalBackupFile();
       setBackupMessage({
         type: 'success',
-        text: `Copia local descargada: ${fileName}`,
+        text: `Copia guardada en ${locationLabel}. También se abrió el menú por si deseas enviarla a otra carpeta.`,
       });
-    } catch {
+    } catch (err: unknown) {
       setBackupMessage({
         type: 'error',
-        text: 'No se pudo generar el archivo de copia de seguridad local.',
+        text:
+          err instanceof Error
+            ? `Error al guardar copia local: ${err.message}`
+            : 'No se pudo generar el archivo de copia de seguridad local.',
       });
     } finally {
       setIsProcessingBackup(false);
@@ -90,18 +94,53 @@ export const SettingsPanel: React.FC<SettingsModalProps> = ({
       setBackupMessage({
         type: 'success',
         text: sharedNatively
-          ? 'Elige "Google Drive" en el menú para guardar tu copia en la nube.'
-          : 'Archivo descargado lista para subir a tu Google Drive.',
+          ? '¡Menú abierto! Toca el icono de "Google Drive" (Guardar en Drive) para subir tu copia.'
+          : 'Archivo descargado listo para subir a tu Google Drive.',
       });
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        (err instanceof Error && err.name === 'AbortError') ||
+        msg.toLowerCase().includes('cancel') ||
+        msg.toLowerCase().includes('dismiss')
+      ) {
         setBackupMessage(null);
       } else {
         setBackupMessage({
           type: 'error',
-          text: 'No se pudo abrir el menú de Google Drive.',
+          text: `No se pudo abrir Google Drive: ${msg}`,
         });
       }
+    } finally {
+      setIsProcessingBackup(false);
+    }
+  };
+
+  // 1.c. Restauración rápida desde la carpeta Documentos del teléfono
+  const handleQuickRestoreLocal = async () => {
+    setIsProcessingBackup(true);
+    setBackupMessage(null);
+    try {
+      const result = await restoreLatestLocalBackupFromDocuments();
+      if (!result) {
+        setBackupMessage({
+          type: 'error',
+          text: 'Usa el botón de arriba "Recuperar Copia" para elegir tu archivo .json.',
+        });
+        return;
+      }
+      setBackupMessage({
+        type: 'success',
+        text: `¡Restaurado desde Documentos (${result.fileName})! (${result.decksCount} grupos, ${result.cardsCount} versículos y ${result.logsCount} repasos).`,
+      });
+    } catch (err: unknown) {
+      setBackupMessage({
+        type: 'error',
+        text:
+          err instanceof Error
+            ? err.message
+            : 'No se encontró copia automática en Documentos. Usa el botón de seleccionar archivo.',
+      });
     } finally {
       setIsProcessingBackup(false);
     }
@@ -243,16 +282,28 @@ export const SettingsPanel: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Botón de Recuperar Copia (permite elegir desde memoria interna o Google Drive en Android) */}
-        <label className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#8C5A3C] hover:bg-[#74482E] text-white text-xs font-semibold cursor-pointer shadow-sm transition active:scale-95">
-          <Upload className="w-4 h-4" />
-          <span>Recuperar Copia (desde Local o Google Drive)</span>
-          <input
-            type="file"
-            accept=".json,application/json"
-            onChange={handleRestoreFromFile}
-            className="hidden"
-          />
-        </label>
+        <div className="space-y-2">
+          <label className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-[#8C5A3C] hover:bg-[#74482E] text-white text-xs font-semibold cursor-pointer shadow-sm transition active:scale-95">
+            <Upload className="w-4 h-4" />
+            <span>Recuperar Copia (Elegir de Google Drive o Local)</span>
+            <input
+              type="file"
+              accept="*/*"
+              onChange={handleRestoreFromFile}
+              className="hidden"
+            />
+          </label>
+
+          <button
+            type="button"
+            disabled={isProcessingBackup}
+            onClick={handleQuickRestoreLocal}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl bg-[#F4F0E8] dark:bg-[#24201D] border border-[#E5DEC9] dark:border-[#332E2A] text-[#5A534C] dark:text-[#D4A373] text-xs font-semibold transition active:scale-95"
+          >
+            <HardDrive className="w-3.5 h-3.5" />
+            <span>Restaurar última copia guardada en Documentos</span>
+          </button>
+        </div>
 
         <p className="text-[11px] text-[#7D746B] dark:text-[#9E958B] leading-relaxed">
           Al pulsar <strong>Recuperar Copia</strong> en Android, el selector de archivos te permite
